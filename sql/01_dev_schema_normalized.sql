@@ -93,7 +93,9 @@ CREATE TABLE IF NOT EXISTS stocks (
     dividend_yield DECIMAL(5,4),
     pe_ratio DECIMAL(8,2),
     book_value DECIMAL(8,2),
-    stock_type VARCHAR(10) NOT NULL DEFAULT 'common'
+    stock_type VARCHAR(10) NOT NULL DEFAULT 'common',
+    
+    CONSTRAINT unique_stock_instrument UNIQUE (instrument_id)
 );
 
 -- Indices table (inherits from base_instruments)
@@ -105,7 +107,9 @@ CREATE TABLE IF NOT EXISTS indices (
     base_date DATE NOT NULL,
     constituent_count INTEGER,
     calculation_frequency VARCHAR(20) NOT NULL DEFAULT 'real_time',
-    index_family VARCHAR(100)
+    index_family VARCHAR(100),
+    
+    CONSTRAINT unique_index_instrument UNIQUE (instrument_id)
 );
 
 -- Stock prices table
@@ -174,6 +178,9 @@ CREATE TABLE IF NOT EXISTS etl_jobs (
     records_updated INTEGER NOT NULL DEFAULT 0,
     records_failed INTEGER NOT NULL DEFAULT 0,
     error_message TEXT,
+    airflow_dag_id VARCHAR(100),
+    airflow_task_id VARCHAR(100),
+    airflow_run_id VARCHAR(100),
     metadata JSONB,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_at_epoch BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)::BIGINT

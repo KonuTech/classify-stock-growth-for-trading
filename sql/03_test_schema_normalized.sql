@@ -3,26 +3,26 @@
 -- Clean schema for production-like testing with real data
 
 -- Create test schema
-CREATE SCHEMA IF NOT EXISTS stock_data_test;
-SET search_path TO stock_data_test, public;
+CREATE SCHEMA IF NOT EXISTS test_stock_data;
+SET search_path TO test_stock_data, public;
 
 -- Create enums (same as dev)
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'instrument_type' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'stock_data_test')) THEN
-        CREATE TYPE stock_data_test.instrument_type AS ENUM ('stock', 'index', 'etf', 'bond', 'future', 'option');
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'instrument_type' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'test_stock_data')) THEN
+        CREATE TYPE test_stock_data.instrument_type AS ENUM ('stock', 'index', 'etf', 'bond', 'future', 'option');
     END IF;
     
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'exchange_code' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'stock_data_test')) THEN
-        CREATE TYPE stock_data_test.exchange_code AS ENUM ('WSE', 'NewConnect', 'Catalyst', 'BondSpot', 'NYSE', 'NASDAQ', 'LSE');
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'exchange_code' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'test_stock_data')) THEN
+        CREATE TYPE test_stock_data.exchange_code AS ENUM ('WSE', 'NewConnect', 'Catalyst', 'BondSpot', 'NYSE', 'NASDAQ', 'LSE');
     END IF;
     
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'job_status' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'stock_data_test')) THEN
-        CREATE TYPE stock_data_test.job_status AS ENUM ('pending', 'running', 'completed', 'failed', 'cancelled', 'retrying');
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'job_status' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'test_stock_data')) THEN
+        CREATE TYPE test_stock_data.job_status AS ENUM ('pending', 'running', 'completed', 'failed', 'cancelled', 'retrying');
     END IF;
     
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'severity_level' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'stock_data_test')) THEN
-        CREATE TYPE stock_data_test.severity_level AS ENUM ('info', 'warning', 'error', 'critical');
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'severity_level' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'test_stock_data')) THEN
+        CREATE TYPE test_stock_data.severity_level AS ENUM ('info', 'warning', 'error', 'critical');
     END IF;
 END $$;
 
@@ -91,7 +91,9 @@ CREATE TABLE IF NOT EXISTS stocks (
     dividend_yield DECIMAL(5,4),
     pe_ratio DECIMAL(8,2),
     book_value DECIMAL(8,2),
-    stock_type VARCHAR(10) NOT NULL DEFAULT 'common'
+    stock_type VARCHAR(10) NOT NULL DEFAULT 'common',
+    
+    CONSTRAINT unique_stock_instrument UNIQUE (instrument_id)
 );
 
 -- Indices table
@@ -103,7 +105,9 @@ CREATE TABLE IF NOT EXISTS indices (
     base_date DATE NOT NULL,
     constituent_count INTEGER,
     calculation_frequency VARCHAR(20) NOT NULL DEFAULT 'real_time',
-    index_family VARCHAR(100)
+    index_family VARCHAR(100),
+    
+    CONSTRAINT unique_index_instrument UNIQUE (instrument_id)
 );
 
 -- Stock prices table (optimized for real data ingestion)

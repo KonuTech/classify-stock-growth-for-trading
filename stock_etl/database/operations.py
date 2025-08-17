@@ -21,7 +21,7 @@ logger = structlog.get_logger(__name__)
 class DatabaseOperations:
     """Database operations for the normalized schema."""
     
-    def __init__(self, schema: str = "stock_data_test"):
+    def __init__(self, schema: str = "test_stock_data"):
         self.schema = schema
     
     def get_db_session(self, schema: str):
@@ -363,13 +363,22 @@ class DatabaseOperations:
                 "started_at_epoch": int(datetime.now(timezone.utc).timestamp())
             }
             
-            # Add Airflow context if provided
+            # Add Airflow context if provided, otherwise use CLI defaults
             if airflow_context:
+                import json
                 params.update({
                     "airflow_dag_id": airflow_context.get("dag_id"),
                     "airflow_task_id": airflow_context.get("task_id"),
                     "airflow_run_id": airflow_context.get("run_id"),
-                    "metadata": airflow_context
+                    "metadata": json.dumps(airflow_context)
+                })
+            else:
+                import json
+                params.update({
+                    "airflow_dag_id": "CLI",
+                    "airflow_task_id": f"cli_{job_type}",
+                    "airflow_run_id": f"cli_run_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}",
+                    "metadata": json.dumps({"execution_context": "CLI", "job_type": job_type})
                 })
             
             result = session.execute(

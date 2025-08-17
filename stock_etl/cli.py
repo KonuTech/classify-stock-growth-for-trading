@@ -70,7 +70,7 @@ def database():
 
 
 @database.command('test-connection')
-@click.option('--schema', default='stock_data_test', help='Database schema to test')
+@click.option('--schema', default='test_stock_data', help='Database schema to test')
 def test_db_connection(schema):
     """Test database connectivity."""
     try:
@@ -234,7 +234,7 @@ def load():
 
 
 @load.command('sample')
-@click.option('--schema', default='stock_data_test', help='Target database schema')
+@click.option('--schema', default='test_stock_data', help='Target database schema')
 def load_sample_data(schema):
     """Load sample data into database."""
     try:
@@ -318,7 +318,7 @@ def load_sample_data(schema):
               type=click.Choice(['stock', 'index']), 
               required=True, 
               help='Instrument type')
-@click.option('--schema', default='stock_data_test', help='Target database schema')
+@click.option('--schema', default='test_stock_data', help='Target database schema')
 def load_single_symbol(symbol, instrument_type, schema):
     """Load data for a single symbol into database."""
     try:
@@ -376,7 +376,7 @@ def load_single_symbol(symbol, instrument_type, schema):
 
 
 @main.command('pipeline')
-@click.option('--schema', default='stock_data_test', help='Target database schema')
+@click.option('--schema', default='test_stock_data', help='Target database schema')
 def run_full_pipeline(schema):
     """Run the complete ETL pipeline."""
     try:
@@ -388,7 +388,7 @@ def run_full_pipeline(schema):
             return False
         
         # Step 2: Initialize database if needed
-        if schema == 'stock_data_test':
+        if schema == 'test_stock_data':
             click.echo("2️⃣ Initializing test database...")
             if not init_test_database.callback():
                 return False

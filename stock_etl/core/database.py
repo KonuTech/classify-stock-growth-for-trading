@@ -15,7 +15,7 @@ logger = structlog.get_logger(__name__)
 class DatabaseConfig:
     """Database configuration management."""
     
-    def __init__(self, schema: str = "stock_data_test"):
+    def __init__(self, schema: str = "test_stock_data"):
         self.host = os.getenv("DB_HOST", "localhost")
         self.port = int(os.getenv("DB_PORT", "5432"))
         self.database = os.getenv("DB_NAME", "stock_data")
@@ -210,7 +210,7 @@ class DatabaseManager:
 # Global database managers for different schemas
 _db_managers = {}
 
-def get_database_manager(schema: str = "stock_data_test") -> DatabaseManager:
+def get_database_manager(schema: str = "test_stock_data") -> DatabaseManager:
     """Get database manager instance (singleton per schema)."""
     if schema not in _db_managers:
         config = DatabaseConfig(schema=schema)
@@ -229,7 +229,7 @@ def get_test_database() -> DatabaseManager:
 
 
 @contextmanager
-def get_db_session(schema: str = "stock_data_test") -> Generator[Session, None, None]:
+def get_db_session(schema: str = "test_stock_data") -> Generator[Session, None, None]:
     """Convenience function to get database session."""
     db_manager = get_database_manager(schema)
     with db_manager.get_session() as session:
