@@ -402,6 +402,7 @@ source = { editable = "." }
 dependencies = [
     { name = "apache-airflow" },
     { name = "click" },
+    { name = "jinja2" },
     { name = "pandas" },
     { name = "pandas-datareader" },
     { name = "psycopg2-binary" },
@@ -428,6 +429,7 @@ requires-dist = [
     { name = "apache-airflow", specifier = ">=3.0.0" },
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.0.0" },
     { name = "click", specifier = ">=8.1.0" },
+    { name = "jinja2", specifier = ">=3.1.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.7.0" },
     { name = "pandas", specifier = ">=2.1.0" },
     { name = "pandas-datareader", specifier = ">=0.10.0" },

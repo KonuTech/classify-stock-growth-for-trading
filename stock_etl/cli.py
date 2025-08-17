@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Dict
 import structlog
 from datetime import datetime
+from jinja2 import Template
+import tempfile
 
 from .core.database import get_database_manager, get_dev_database, get_test_database
 from .core.models import InstrumentType, JobStatus
@@ -51,6 +53,22 @@ structlog.configure(
 logger = structlog.get_logger(__name__)
 
 
+def render_schema_template(schema_type: str, schema_name: str) -> str:
+    """Render the schema template with the given parameters."""
+    template_path = Path("sql/schema_template.sql.j2")
+    if not template_path.exists():
+        raise FileNotFoundError(f"Schema template not found: {template_path}")
+    
+    with open(template_path, 'r') as f:
+        template_content = f.read()
+    
+    template = Template(template_content)
+    return template.render(
+        schema_type=schema_type,
+        schema_name=schema_name
+    )
+
+
 @click.group()
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging')
 def main(verbose):
@@ -94,27 +112,33 @@ def init_dev_database():
         
         db_manager = get_dev_database()
         
-        # Execute schema creation
-        schema_file = Path("sql/01_dev_schema_normalized.sql")
-        if not schema_file.exists():
-            click.echo(f"❌ Schema file not found: {schema_file}")
-            return False
+        # Render schema template
+        click.echo("📝 Rendering development schema template...")
+        schema_sql = render_schema_template("development", "dev_stock_data")
         
-        click.echo("📝 Creating development schema...")
-        if not db_manager.execute_sql_file(str(schema_file)):
-            click.echo("❌ Failed to create development schema")
-            return False
+        # Create temporary file and execute schema
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.sql', delete=False) as temp_file:
+            temp_file.write(schema_sql)
+            temp_schema_path = temp_file.name
         
-        # Execute dummy data insertion
-        data_file = Path("sql/02_dev_dummy_data.sql")
-        if not data_file.exists():
-            click.echo(f"❌ Data file not found: {data_file}")
-            return False
+        try:
+            click.echo("📝 Creating development schema...")
+            if not db_manager.execute_sql_file(temp_schema_path):
+                click.echo("❌ Failed to create development schema")
+                return False
+        finally:
+            # Clean up temporary file
+            Path(temp_schema_path).unlink(missing_ok=True)
         
-        click.echo("📊 Inserting dummy data...")
-        if not db_manager.execute_sql_file(str(data_file)):
-            click.echo("❌ Failed to insert dummy data")
-            return False
+        # Execute dummy data insertion if it exists
+        data_file = Path("sql/dev_dummy_data.sql")
+        if data_file.exists():
+            click.echo("📊 Inserting dummy data...")
+            if not db_manager.execute_sql_file(str(data_file)):
+                click.echo("❌ Failed to insert dummy data")
+                return False
+        else:
+            click.echo("ℹ️ No dummy data file found, skipping...")
         
         click.echo("✅ Development database initialized successfully!")
         return True
@@ -132,16 +156,23 @@ def init_test_database():
         
         db_manager = get_test_database()
         
-        # Execute schema creation
-        schema_file = Path("sql/03_test_schema_normalized.sql")
-        if not schema_file.exists():
-            click.echo(f"❌ Schema file not found: {schema_file}")
-            return False
+        # Render schema template
+        click.echo("📝 Rendering test schema template...")
+        schema_sql = render_schema_template("test", "test_stock_data")
         
-        click.echo("📝 Creating test schema...")
-        if not db_manager.execute_sql_file(str(schema_file)):
-            click.echo("❌ Failed to create test schema")
-            return False
+        # Create temporary file and execute schema
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.sql', delete=False) as temp_file:
+            temp_file.write(schema_sql)
+            temp_schema_path = temp_file.name
+        
+        try:
+            click.echo("📝 Creating test schema...")
+            if not db_manager.execute_sql_file(temp_schema_path):
+                click.echo("❌ Failed to create test schema")
+                return False
+        finally:
+            # Clean up temporary file
+            Path(temp_schema_path).unlink(missing_ok=True)
         
         click.echo("✅ Test database initialized successfully!")
         return True
