@@ -1,27 +1,29 @@
--- Test Schema
+-- {{ schema_type|title }} Schema for Stock ETL Pipeline
 -- PostgreSQL 17+ compatible with timezone and epoch support
+-- Template: schema_template.sql.j2
 
-DROP SCHEMA IF EXISTS test_stock_data CASCADE;
-CREATE SCHEMA IF NOT EXISTS test_stock_data;
-SET search_path TO test_stock_data, public;
+-- Drop and recreate schema for clean state
+DROP SCHEMA IF EXISTS {{ schema_name }} CASCADE;
+CREATE SCHEMA IF NOT EXISTS {{ schema_name }};
+SET search_path TO {{ schema_name }}, public;
 
 -- Create enums
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'instrument_type' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'test_stock_data')) THEN
-        CREATE TYPE test_stock_data.instrument_type AS ENUM ('stock', 'index', 'etf', 'bond', 'future', 'option');
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'instrument_type' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = '{{ schema_name }}')) THEN
+        CREATE TYPE {{ schema_name }}.instrument_type AS ENUM ('stock', 'index', 'etf', 'bond', 'future', 'option');
     END IF;
     
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'exchange_code' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'test_stock_data')) THEN
-        CREATE TYPE test_stock_data.exchange_code AS ENUM ('WSE', 'NewConnect', 'Catalyst', 'BondSpot', 'NYSE', 'NASDAQ', 'LSE');
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'exchange_code' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = '{{ schema_name }}')) THEN
+        CREATE TYPE {{ schema_name }}.exchange_code AS ENUM ('WSE', 'NewConnect', 'Catalyst', 'BondSpot', 'NYSE', 'NASDAQ', 'LSE');
     END IF;
     
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'job_status' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'test_stock_data')) THEN
-        CREATE TYPE test_stock_data.job_status AS ENUM ('pending', 'running', 'completed', 'failed', 'cancelled', 'retrying');
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'job_status' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = '{{ schema_name }}')) THEN
+        CREATE TYPE {{ schema_name }}.job_status AS ENUM ('pending', 'running', 'completed', 'failed', 'cancelled', 'retrying');
     END IF;
     
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'severity_level' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'test_stock_data')) THEN
-        CREATE TYPE test_stock_data.severity_level AS ENUM ('info', 'warning', 'error', 'critical');
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'severity_level' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = '{{ schema_name }}')) THEN
+        CREATE TYPE {{ schema_name }}.severity_level AS ENUM ('info', 'warning', 'error', 'critical');
     END IF;
 END $$;
 
@@ -197,6 +199,7 @@ CREATE TABLE IF NOT EXISTS etl_job_details (
     id BIGSERIAL PRIMARY KEY,
     job_id BIGINT NOT NULL REFERENCES etl_jobs(id) ON DELETE CASCADE,
     instrument_id INTEGER REFERENCES base_instruments(id) ON DELETE CASCADE,
+    symbol VARCHAR(20),
     operation VARCHAR(20) NOT NULL,
     date_processed DATE NOT NULL,
     date_processed_epoch BIGINT NOT NULL,
@@ -296,7 +299,7 @@ BEGIN
     EXECUTE 'CREATE INDEX IF NOT EXISTS idx_index_prices_source ON index_prices(data_source)';
     EXECUTE 'CREATE INDEX IF NOT EXISTS idx_index_prices_hash ON index_prices(raw_data_hash)';
     
-    -- ETL jobs indexes
+    -- ETL monitoring indexes
     EXECUTE 'CREATE INDEX IF NOT EXISTS idx_etl_jobs_status ON etl_jobs(status)';
     EXECUTE 'CREATE INDEX IF NOT EXISTS idx_etl_jobs_type ON etl_jobs(job_type)';
     EXECUTE 'CREATE INDEX IF NOT EXISTS idx_etl_jobs_started_epoch ON etl_jobs(started_at_epoch)';
@@ -367,3 +370,49 @@ BEGIN
         BEFORE UPDATE ON data_sources 
         FOR EACH ROW EXECUTE FUNCTION update_timestamp_and_epoch_columns();
 END $$;
+
+{% if schema_type == 'test' %}
+-- Insert basic reference data (no dummy price data)
+DO $$
+DECLARE
+    v_poland_id INTEGER;
+    v_wse_id INTEGER;
+BEGIN
+    -- Insert countries
+    INSERT INTO countries (name, iso_code, currency_code, timezone) 
+    VALUES ('Poland', 'POL', 'PLN', 'Europe/Warsaw')
+    ON CONFLICT (iso_code) DO NOTHING
+    RETURNING id INTO v_poland_id;
+    
+    IF v_poland_id IS NULL THEN
+        SELECT id INTO v_poland_id FROM countries WHERE iso_code = 'POL';
+    END IF;
+    
+    -- Insert exchanges
+    INSERT INTO exchanges (name, mic_code, country_id, timezone, market_open, market_close, is_active)
+    VALUES ('Warsaw Stock Exchange', 'XWAR', v_poland_id, 'Europe/Warsaw', '09:00:00', '17:00:00', TRUE)
+    ON CONFLICT (mic_code) DO NOTHING;
+    
+    -- Insert basic sectors
+    INSERT INTO sectors (name, description, classification_system)
+    VALUES 
+        ('Financial Services', 'Banks, brokerages, insurance companies', 'GICS'),
+        ('Energy', 'Oil, gas, renewable energy companies', 'GICS'),
+        ('Technology', 'Software, hardware, IT services', 'GICS'),
+        ('Utilities', 'Electric, gas, water utilities', 'GICS'),
+        ('Healthcare', 'Pharmaceuticals, medical devices, healthcare services', 'GICS'),
+        ('Consumer Discretionary', 'Retail, automotive, media & entertainment', 'GICS'),
+        ('Consumer Staples', 'Food, beverages, household products', 'GICS'),
+        ('Materials', 'Chemicals, construction materials, metals & mining', 'GICS'),
+        ('Industrials', 'Aerospace, construction, machinery, transportation', 'GICS'),
+        ('Real Estate', 'REITs and real estate management companies', 'GICS')
+    ON CONFLICT (name) DO NOTHING;
+    
+    -- Insert data source for Stooq
+    INSERT INTO data_sources (name, base_url, data_format, rate_limit_per_minute, default_timezone, source_type) 
+    VALUES ('stooq', 'https://stooq.com/q/d/l/', 'csv', 60, 'Europe/Warsaw', 'file')
+    ON CONFLICT (name) DO NOTHING;
+    
+    RAISE NOTICE '{{ schema_type|title }} schema initialized successfully - ready for real data ingestion';
+END $$;
+{% endif %}
