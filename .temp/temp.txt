@@ -5,3 +5,8 @@ uv init
 uv sync
 uv add pip
 uv sync
+
+Airflow UI Login:
+- Username: admin
+- Password: u8Zt2hYnsqXM4MNw
+- URL: http://localhost:8080
