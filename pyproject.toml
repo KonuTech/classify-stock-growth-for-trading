@@ -8,13 +8,15 @@ dependencies = [
     "pandas>=2.1.0",
     "pandas-datareader>=0.10.0",
     "psycopg2-binary>=2.9.0",
-    "sqlalchemy>=2.0.0",
+    "sqlalchemy>=1.4.49,<2.0.0",
     "apache-airflow>=3.0.0",
     "python-dotenv>=1.0.0",
     "pydantic>=2.5.0",
     "click>=8.1.0",
     "structlog>=23.2.0",
     "tenacity>=8.2.0",
+    "pytz>=2023.3",
+    "requests>=2.31.0",
 ]
 
 [project.optional-dependencies]
@@ -32,6 +34,9 @@ stock-etl = "stock_etl.cli:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["stock_etl"]
 
 [tool.black]
 line-length = 88

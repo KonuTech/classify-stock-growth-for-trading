@@ -1,0 +1,1 @@
+"""Database operations for stock ETL pipeline."""

@@ -1,0 +1,1 @@
+"""Core ETL components for stock data pipeline."""
