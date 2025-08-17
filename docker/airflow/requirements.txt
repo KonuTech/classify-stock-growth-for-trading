@@ -6,3 +6,4 @@ python-dotenv>=1.0.0
 pydantic>=2.5.0
 structlog>=23.2.0
 tenacity>=8.2.0
+holidays>=0.34

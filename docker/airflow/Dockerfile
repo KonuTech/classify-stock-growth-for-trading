@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
 USER airflow
 
 # Copy requirements and install Python dependencies
-COPY requirements.txt /tmp/requirements.txt
+COPY docker/airflow/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
 # Copy the stock_etl package
