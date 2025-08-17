@@ -8,6 +8,8 @@
 
 A production-ready ETL pipeline for extracting, transforming, and loading Polish stock market data with automated scheduling, data quality validation, and comprehensive monitoring.
 
+> **📚 Developer Resources**: For detailed technical documentation, architecture decisions, and development guidance, see **[CLAUDE.md](CLAUDE.md)**. This file contains comprehensive information about the codebase structure, essential commands, database design patterns, Airflow DAG configuration, and trading calendar integration.
+
 ## 🎯 Project Overview
 
 This project implements a robust data pipeline that:

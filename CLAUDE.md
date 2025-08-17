@@ -20,6 +20,9 @@ This is a stock data ETL pipeline project that extracts financial data from Stoo
 - **stock_etl.data.stooq_extractor**: Data extraction from Stooq financial service
 - **stock_etl.database.operations**: Database CRUD operations for normalized schema
 - **stock_etl.cli**: Command-line interface for all ETL operations
+- **stock_etl.airflow_dags.stock_etl_dag**: Unified Airflow DAG with comprehensive workflow
+- **stock_etl.utils.dag_utils**: DAG utilities for execution mode detection and logging
+- **stock_etl.utils.polish_trading_calendar**: Warsaw Stock Exchange trading calendar
 
 ### Data Flow
 1. Extract data from Stooq API (CSV format)
@@ -33,6 +36,9 @@ This is a stock data ETL pipeline project that extracts financial data from Stoo
 ```bash
 # Install dependencies
 uv sync
+
+# Install with development dependencies
+uv sync --group dev
 
 # Start PostgreSQL and Airflow services
 docker-compose up -d
@@ -76,8 +82,11 @@ ruff check stock_etl/ tests/
 # Type checking
 mypy stock_etl/
 
-# Run tests
-pytest tests/
+# Run tests (basic test file available)
+python test_etl.py
+
+# Run tests with pytest (if tests/ directory is populated)
+pytest tests/ -v --cov=stock_etl
 ```
 
 ## Database Schemas
@@ -111,8 +120,94 @@ DB_PASSWORD=postgres
 
 ### Docker Services
 - PostgreSQL: Available on port 5432
-- Airflow Webserver: Available on port 8080 (admin/admin)
+- Airflow Webserver: Available on port 8080 (admin/u8Zt2hYnsqXM4MNw)
 - Airflow uses LocalExecutor with PostgreSQL backend
+
+### Docker Management
+```bash
+# View service logs
+docker-compose logs -f postgres
+docker-compose logs -f airflow
+
+# Restart services
+docker-compose restart
+
+# Stop and remove all containers/volumes (full reset)
+docker-compose down -v
+```
+
+## Airflow Integration
+
+### Unified DAG Architecture
+The `stock_etl_unified_pipeline` DAG in `stock_etl/airflow_dags/stock_etl_dag.py` provides:
+
+- **Smart Execution Mode Detection**: Automatically detects backfill vs incremental runs
+- **Polish Trading Calendar Integration**: Uses `polish_trading_calendar.py` for market day validation
+- **Comprehensive ETL Job Tracking**: Full lifecycle tracking with Airflow context
+- **Data Quality Validation**: Automated OHLC validation and anomaly detection
+- **Error Handling and Retry Logic**: Graceful failure handling with detailed logging
+
+### DAG Configuration Parameters
+```python
+# Default DAG parameters (configurable via Airflow UI)
+{
+    "schema": "prod_stock_data",      # Target database schema
+    "mode": "incremental",           # incremental | backfill
+    "instruments": "all",            # all | specific symbols
+    "data_sources": "stooq",         # Data source configuration
+    "enable_validation": true,       # Enable data quality checks
+    "batch_size": 50                 # Processing batch size
+}
+```
+
+### DAG Task Flow
+1. **check_prerequisites** - Validates trading calendar and execution context
+2. **create_etl_job** - Creates ETL job record with comprehensive metadata
+3. **extract_and_transform** - Data extraction with source tracking
+4. **load_data** - Database loading with detailed per-instrument tracking
+5. **validate_data_quality** - Automated quality checks (OHLC, gaps, volumes)
+6. **finalize_etl_session** - Job completion with final status and metrics
+
+### Manual DAG Operations
+```bash
+# Trigger DAG via Airflow CLI
+docker-compose exec airflow airflow dags trigger stock_etl_unified_pipeline \
+  --conf '{"schema": "dev_stock_data", "mode": "incremental"}'
+
+# Test specific date (backfill)
+docker-compose exec airflow airflow dags test stock_etl_unified_pipeline "2025-08-15" \
+  --conf '{"schema": "dev_stock_data", "mode": "backfill"}'
+
+# List DAG runs
+docker-compose exec airflow airflow dags list-runs -d stock_etl_unified_pipeline
+
+# Check DAG status and next runs
+docker-compose exec airflow airflow dags show stock_etl_unified_pipeline
+
+# Monitor task logs
+docker-compose exec airflow airflow tasks logs stock_etl_unified_pipeline extract_and_transform 2025-08-17
+
+# Clear DAG run for retry
+docker-compose exec airflow airflow dags clear -c stock_etl_unified_pipeline
+```
+
+### ETL Job Monitoring
+```bash
+# Connect to database and check ETL jobs
+docker-compose exec postgres psql -U postgres -d stock_data
+
+# Monitor recent ETL jobs
+SET search_path TO dev_stock_data;
+SELECT job_name, status, records_processed, duration_seconds, started_at 
+FROM etl_jobs 
+ORDER BY started_at DESC LIMIT 10;
+
+# Check data quality metrics
+SELECT instrument_id, metric_name, is_valid, severity 
+FROM data_quality_metrics 
+WHERE created_at >= CURRENT_DATE - INTERVAL '7 days' 
+  AND is_valid = FALSE;
+```
 
 ## Data Sources and Formats
 
@@ -170,3 +265,62 @@ DB_PASSWORD=postgres
 - Automatic type conversion and cleaning
 - Price relationship validation (high ≥ open/close ≥ low)
 - Trading date and volume validation
+
+## Trading Calendar & DAG Utilities
+
+### Polish Trading Calendar (`polish_trading_calendar.py`)
+- **WSE Trading Hours**: 9:00-17:00 CET/CEST, Monday-Friday
+- **Holiday Integration**: Uses `holidays` library for Polish public holidays
+- **Smart Date Functions**: 
+  - `is_trading_day()` - Validates trading days excluding weekends/holidays
+  - `get_previous_trading_day()` - For incremental ETL target date calculation
+  - `get_trading_days_in_range()` - For backfill operations
+  - `is_market_open_now()` - Real-time market status
+
+### DAG Utilities (`dag_utils.py`)
+- **Execution Mode Detection**: Automatically determines backfill vs incremental based on:
+  - DAG run type (manual, backfill, scheduled)
+  - Execution date age (>7 days = backfill)
+  - Explicit configuration parameters
+- **ETL Logger**: Enhanced logging with file and console handlers for Airflow
+- **Schema Context Management**: Dynamic schema selection from DAG parameters
+- **Date Range Validation**: Prevents accidentally huge backfill operations
+
+### Trading Calendar Logic
+```python
+# Incremental mode: Process previous trading day
+target_date = polish_calendar.get_previous_trading_day(today)
+
+# Backfill mode: Process exact execution date (if trading day)
+if not polish_calendar.is_trading_day(execution_date):
+    # Skip non-trading days or log warning
+```
+
+## Schema Management
+
+### Jinja2 Template System (`sql/schema_template.sql.j2`)
+Dynamic schema generation supporting multiple environments:
+
+- **Template Variables**: `schema_name`, `schema_type` (dev/test/prod)
+- **Environment-Specific Data**: Test schemas exclude dummy data
+- **Comprehensive Schema**: All tables, indexes, functions, and triggers
+- **Performance Optimization**: Automatically creates optimized indexes
+
+### Schema Types and Usage
+```bash
+# Development schema with dummy data
+schema_type: "development" → Includes sample instruments and test data
+
+# Test schema - clean environment  
+schema_type: "test" → Reference data only, no dummy prices
+
+# Production schema
+schema_type: "production" → Production-ready with full constraints
+```
+
+### Key Schema Features
+- **Normalized Design**: Separate tables for exchanges, instruments, stocks, indices
+- **Timezone Support**: UTC and local timestamps with epoch conversion
+- **Data Integrity**: OHLC validation, positive price constraints
+- **Performance Indexes**: Optimized for time-series queries and joins
+- **ETL Tracking**: Complete job lifecycle and data quality metrics
