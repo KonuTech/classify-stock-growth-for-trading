@@ -1,0 +1,13 @@
+{"timestamp":"2025-08-18T11:28:40.205043","level":"info","event":"DAG bundles loaded: dags-folder","logger":"airflow.dag_processing.bundles.manager.DagBundlesManager"}
+{"timestamp":"2025-08-18T11:28:40.205340","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/stock_etl_dag.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-08-18T11:28:40.318209","level":"warning","event":"No execution date in context, using today: 2025-08-18","logger":"utils.dag_utils"}
+{"timestamp":"2025-08-18T11:28:40.321743","level":"info","event":"Execution mode determined: backfill (DAG run type: DagRunType.MANUAL)","logger":"utils.dag_utils"}
+{"timestamp":"2025-08-18T11:28:40.321825","level":"info","event":"Target date for processing: 2025-08-18","logger":"utils.dag_utils"}
+{"timestamp":"2025-08-18T11:28:40.321865","level":"info","event":"Is trading day: True","logger":"utils.dag_utils"}
+{"timestamp":"2025-08-18T11:28:40.330668Z","level":"error","event":"INFO - Prerequisites passed - proceeding with backfill mode","chan":"stderr","logger":"task"}
+{"timestamp":"2025-08-18T11:28:40.330667","level":"info","event":"Prerequisites passed - proceeding with backfill mode","logger":"prerequisite_check"}
+{"timestamp":"2025-08-18T11:28:40.330729","level":"info","event":"Done. Returned value was: proceed_with_etl","logger":"airflow.task.operators.airflow.providers.standard.operators.python.BranchPythonOperator"}
+{"timestamp":"2025-08-18T11:28:40.330768","level":"info","event":"Branch into proceed_with_etl","logger":"airflow.task.operators.airflow.providers.standard.operators.python.BranchPythonOperator"}
+{"timestamp":"2025-08-18T11:28:40.331032","level":"info","event":"Following branch {'proceed_with_etl'}","logger":"airflow.task.operators.airflow.providers.standard.operators.python.BranchPythonOperator"}
+{"timestamp":"2025-08-18T11:28:40.331149","level":"info","event":"Skipping tasks [('skip_execution', -1)]","logger":"airflow.task.operators.airflow.providers.standard.operators.python.BranchPythonOperator"}
+{"timestamp":"2025-08-18T11:28:40.339293","level":"info","event":"Skipping downstream tasks.","logger":"task"}

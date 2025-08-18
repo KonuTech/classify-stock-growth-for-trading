@@ -9,4 +9,32 @@ uv sync
 Airflow UI Login:
 - Username: admin
 - Password: u8Zt2hYnsqXM4MNw
+Simple auth manager | Password for user 'admin': ez8CXfZnBauQB43a
+nMSz94fuMtTMsYZ2
 - URL: http://localhost:8080
+
+  Access Details:
+  - URL: http://localhost:5050
+  - Email: admin@admin.com
+  - Password: admin
+
+  To connect to your PostgreSQL database in pgAdmin:
+  - Host: postgres (container name)
+  - Port: 5432
+  - Database: stock_data
+  - Username: postgres
+  - Password: postgres
+  
+
+  ● When connecting from pgAdmin (http://localhost:5050), use these connection details:
+
+  In pgAdmin, create a new server with:
+  - General Tab:
+    - Name: Stock Data PostgreSQL (or any name you prefer)
+  - Connection Tab:
+    - Host name/address: postgres (Docker container name, NOT localhost)
+    - Port: 5432
+    - Maintenance database: stock_data
+    - Username: postgres
+    - Password: postgres
+

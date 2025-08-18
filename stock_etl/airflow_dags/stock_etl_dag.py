@@ -49,35 +49,123 @@ from utils.polish_trading_calendar import polish_calendar
 # from core.config import ETLConfig
 
 
-# DAG Configuration
-default_args = {
-    'owner': 'stock-etl',
-    'depends_on_past': False,
-    'start_date': datetime(2024, 1, 1),
-    'email_on_failure': True,
-    'email_on_retry': False,
-    'retries': 2,
-    'retry_delay': timedelta(minutes=5),
-    'catchup': True,  # Enable catchup for backfill support
+# Environment configurations for dynamic DAG generation
+ENVIRONMENTS = {
+    'dev': {
+        'schema': 'dev_stock_data',
+        'description': 'Development stock data ETL pipeline',
+        'schedule': None,  # Manual triggering for development
+        'tags': ['stock-data', 'etl', 'development'],
+        'retries': 1,
+        'catchup': False
+    },
+    'test': {
+        'schema': 'test_stock_data', 
+        'description': 'Test stock data ETL pipeline',
+        'schedule': None,  # Manual triggering for testing
+        'tags': ['stock-data', 'etl', 'testing'],
+        'retries': 1,
+        'catchup': False
+    },
+    'prod': {
+        'schema': 'prod_stock_data',
+        'description': 'Production stock data ETL pipeline',
+        'schedule': '0 18 * * 1-5',  # Run at 6 PM on weekdays
+        'tags': ['stock-data', 'etl', 'production'],
+        'retries': 2,
+        'catchup': True
+    }
 }
 
-# DAG definition
-dag = DAG(
-    'stock_etl_unified_pipeline',
-    default_args=default_args,
-    description='Unified stock data ETL pipeline with comprehensive metadata tracking',
-    schedule='0 18 * * 1-5',  # Run at 6 PM on weekdays
-    max_active_runs=1,  # Prevent concurrent runs
-    tags=['stock-data', 'etl', 'production'],
-    params={
-        'schema': 'prod_stock_data',
-        'mode': 'incremental', 
-        'instruments': 'all',
-        'data_sources': 'stooq',
-        'enable_validation': True,
-        'batch_size': 50
+def create_dag(environment_name, environment_config):
+    """
+    Create a DAG for a specific environment using dynamic configuration.
+    """
+    
+    # DAG Configuration
+    default_args = {
+        'owner': 'stock-etl',
+        'depends_on_past': False,
+        'start_date': datetime(2024, 1, 1),
+        'email_on_failure': True,
+        'email_on_retry': False,
+        'retries': environment_config['retries'],
+        'retry_delay': timedelta(minutes=5),
+        'catchup': environment_config['catchup'],
     }
-)
+
+    # Create environment-specific DAG
+    dag = DAG(
+        f'{environment_name}_stock_etl_pipeline',
+        default_args=default_args,
+        description=environment_config['description'],
+        schedule=environment_config['schedule'],
+        max_active_runs=1,  # Prevent concurrent runs
+        tags=environment_config['tags'],
+        params={
+            'schema': environment_config['schema'],
+            'mode': 'incremental', 
+            'instruments': 'all',
+            'data_sources': 'stooq',
+            'enable_validation': True,
+            'batch_size': 50,
+            'environment': environment_name  # Add environment identifier
+        }
+    )
+
+    # Task definitions inside the DAG function
+    check_prerequisites_task = BranchPythonOperator(
+        task_id='check_prerequisites',
+        python_callable=check_execution_prerequisites,
+        dag=dag
+    )
+
+    skip_execution_task = EmptyOperator(
+        task_id='skip_execution',
+        dag=dag
+    )
+
+    proceed_task = EmptyOperator(
+        task_id='proceed_with_etl',
+        dag=dag
+    )
+
+    create_etl_job_task = PythonOperator(
+        task_id='create_etl_job',
+        python_callable=create_etl_job_record,
+        dag=dag
+    )
+
+    extract_transform_task = PythonOperator(
+        task_id='extract_and_transform',
+        python_callable=extract_and_transform_data,
+        dag=dag
+    )
+
+    load_task = PythonOperator(
+        task_id='load_data',
+        python_callable=load_data_to_database,
+        dag=dag
+    )
+
+    validate_task = PythonOperator(
+        task_id='validate_data_quality',
+        python_callable=validate_data_quality,
+        dag=dag
+    )
+
+    finalize_task = PythonOperator(
+        task_id='finalize_etl_session',
+        python_callable=finalize_etl_session,
+        trigger_rule='none_failed_min_one_success',
+        dag=dag
+    )
+
+    # Task dependencies
+    check_prerequisites_task >> [skip_execution_task, proceed_task]
+    proceed_task >> create_etl_job_task >> extract_transform_task >> load_task >> validate_task >> finalize_task
+    
+    return dag
 
 
 def check_execution_prerequisites(**context) -> str:
@@ -127,7 +215,8 @@ def create_etl_job_record(**context) -> int:
             key='execution_config'
         )
         
-        target_schema = get_schema_from_context(context)
+        # Get schema from DAG params (environment-specific)
+        target_schema = context['params']['schema']
         
         # Create job metadata
         job_metadata = {
@@ -135,7 +224,7 @@ def create_etl_job_record(**context) -> int:
                 'dag_id': context['dag'].dag_id,
                 'task_id': context['task'].task_id,
                 'run_id': context['run_id'],
-                'execution_date': context['ds'],
+                'execution_date': context.get('ds'),
                 'logical_date': context['logical_date'].isoformat() if context.get('logical_date') else None,
                 'dag_run_conf': context.get('dag_run').conf if context.get('dag_run') else {}
             },
@@ -224,7 +313,8 @@ def extract_and_transform_data(**context) -> Dict[str, Any]:
             task_ids='check_prerequisites', 
             key='execution_config'
         )
-        target_schema = get_schema_from_context(context)
+        # Get schema from DAG params (environment-specific)
+        target_schema = context['params']['schema']
         
         # Mock extraction data (would be replaced with real ETL orchestrator)
         target_date = execution_config['target_date']
@@ -339,7 +429,8 @@ def load_data_to_database(**context) -> Dict[str, Any]:
         # Get context data
         job_id = context['task_instance'].xcom_pull(task_ids='create_etl_job')
         extract_results = context['task_instance'].xcom_pull(task_ids='extract_and_transform')
-        target_schema = get_schema_from_context(context)
+        # Get schema from DAG params (environment-specific)
+        target_schema = context['params']['schema']
         
         postgres_hook = PostgresHook(postgres_conn_id='postgres_default')
         
@@ -571,7 +662,8 @@ def validate_data_quality(**context) -> Dict[str, Any]:
         # Get context
         job_id = context['task_instance'].xcom_pull(task_ids='create_etl_job')
         load_results = context['task_instance'].xcom_pull(task_ids='load_data')
-        target_schema = get_schema_from_context(context)
+        # Get schema from DAG params (environment-specific)
+        target_schema = context['params']['schema']
         
         # Skip validation if disabled
         if not context['params'].get('enable_validation', True):
@@ -709,9 +801,10 @@ def finalize_etl_session(**context) -> None:
     try:
         # Get all results
         job_id = context['task_instance'].xcom_pull(task_ids='create_etl_job')
-        load_results = context['task_instance'].xcom_pull(task_ids='load_data')
-        validation_results = context['task_instance'].xcom_pull(task_ids='validate_data_quality')
-        target_schema = get_schema_from_context(context)
+        load_results = context['task_instance'].xcom_pull(task_ids='load_data') or {}
+        validation_results = context['task_instance'].xcom_pull(task_ids='validate_data_quality') or {}
+        # Get schema from DAG params (environment-specific)
+        target_schema = context['params']['schema']
         
         # Calculate final job status
         final_status = 'completed'
@@ -721,40 +814,51 @@ def finalize_etl_session(**context) -> None:
             else:
                 final_status = 'completed'  # Partial success
         
-        # Update ETL job with final results
-        postgres_hook = PostgresHook(postgres_conn_id='postgres_default')
-        with postgres_hook.get_conn() as conn:
-            with conn.cursor() as cursor:
-                completed_at = datetime.now()
-                
-                # Get job start time for duration calculation
-                cursor.execute(f"""
-                SELECT started_at FROM {target_schema}.etl_jobs WHERE id = %s
-                """, (job_id,))
-                
-                started_at = cursor.fetchone()[0]
-                duration_seconds = int((completed_at - started_at).total_seconds())
-                
-                # Update job record
-                cursor.execute(f"""
-                UPDATE {target_schema}.etl_jobs 
-                SET status = %s,
-                    completed_at = %s,
-                    completed_at_epoch = %s,
-                    duration_seconds = %s
-                WHERE id = %s
-                """, (
-                    final_status, completed_at, int(completed_at.timestamp()),
-                    duration_seconds, job_id
-                ))
-                
-                conn.commit()
+        # Update ETL job with final results (skip if testing without job_id)
+        duration_seconds = 0
+        if job_id:
+            postgres_hook = PostgresHook(postgres_conn_id='postgres_default')
+            with postgres_hook.get_conn() as conn:
+                with conn.cursor() as cursor:
+                    # Use timezone-naive datetime to match database schema
+                    completed_at = datetime.now()
+                    if completed_at.tzinfo is not None:
+                        completed_at = completed_at.replace(tzinfo=None)
+                    
+                    # Get job start time for duration calculation
+                    cursor.execute(f"""
+                    SELECT started_at FROM {target_schema}.etl_jobs WHERE id = %s
+                    """, (job_id,))
+                    
+                    started_at = cursor.fetchone()[0]
+                    # Ensure both datetimes are timezone-naive
+                    if started_at.tzinfo is not None:
+                        started_at = started_at.replace(tzinfo=None)
+                    duration_seconds = int((completed_at - started_at).total_seconds())
+                    
+                    # Update job record
+                    cursor.execute(f"""
+                    UPDATE {target_schema}.etl_jobs 
+                    SET status = %s,
+                        completed_at = %s,
+                        completed_at_epoch = %s,
+                        duration_seconds = %s
+                    WHERE id = %s
+                    """, (
+                        final_status, completed_at, int(completed_at.timestamp()),
+                        duration_seconds, job_id
+                    ))
+                    
+                    conn.commit()
+        else:
+            logger.info("No job_id found - skipping database update (likely testing mode)")
+            completed_at = datetime.now()
         
         # Create final summary
         final_summary = {
             'job_id': job_id,
             'status': final_status,
-            'execution_date': context['ds'],
+            'execution_date': context.get('ds'),
             'schema': target_schema,
             'duration_seconds': duration_seconds,
             'total_processed': load_results.get('total_processed', 0),
@@ -771,8 +875,11 @@ def finalize_etl_session(**context) -> None:
         execution_config = context['task_instance'].xcom_pull(
             task_ids='check_prerequisites', 
             key='execution_config'
-        )
-        log_execution_summary(execution_config, final_summary)
+        ) or {}
+        if execution_config:
+            log_execution_summary(execution_config, final_summary)
+        else:
+            logger.info("No execution config found - skipping execution summary (likely testing mode)")
         
         # Store final summary in XCom
         context['task_instance'].xcom_push(key='final_summary', value=final_summary)
@@ -795,54 +902,7 @@ def finalize_etl_session(**context) -> None:
         raise
 
 
-# Task definitions
-check_prerequisites_task = BranchPythonOperator(
-    task_id='check_prerequisites',
-    python_callable=check_execution_prerequisites,
-    dag=dag
-)
-
-skip_execution_task = EmptyOperator(
-    task_id='skip_execution',
-    dag=dag
-)
-
-proceed_task = EmptyOperator(
-    task_id='proceed_with_etl',
-    dag=dag
-)
-
-create_etl_job_task = PythonOperator(
-    task_id='create_etl_job',
-    python_callable=create_etl_job_record,
-    dag=dag
-)
-
-extract_transform_task = PythonOperator(
-    task_id='extract_and_transform',
-    python_callable=extract_and_transform_data,
-    dag=dag
-)
-
-load_task = PythonOperator(
-    task_id='load_data',
-    python_callable=load_data_to_database,
-    dag=dag
-)
-
-validate_task = PythonOperator(
-    task_id='validate_data_quality',
-    python_callable=validate_data_quality,
-    dag=dag
-)
-
-finalize_task = PythonOperator(
-    task_id='finalize_etl_session',
-    python_callable=finalize_etl_session,
-    trigger_rule='none_failed_min_one_success',  # Run even if validation fails
-    dag=dag
-)
-
-# Task dependencies
-check_prerequisites_task >> [skip_execution_task, proceed_task]
-proceed_task >> create_etl_job_task >> extract_transform_task >> load_task >> validate_task >> finalize_task
+# Generate DAGs for all environments
+for env_name, env_config in ENVIRONMENTS.items():
+    dag_id = f'{env_name}_stock_etl_pipeline'
+    globals()[dag_id] = create_dag(env_name, env_config)

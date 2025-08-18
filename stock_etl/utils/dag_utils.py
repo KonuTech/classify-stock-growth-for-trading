@@ -85,9 +85,19 @@ def determine_execution_mode(context: Dict[str, Any]) -> Tuple[str, Dict[str, An
     """
     logger = logging.getLogger(__name__)
     
-    # Get execution context
+    # Get execution context with safe access
     dag_run: DagRun = context.get('dag_run')
-    execution_date = context['ds']  # String format YYYY-MM-DD
+    execution_date = context.get('ds')  # String format YYYY-MM-DD
+    
+    # Handle missing ds context (fallback to logical_date or today)
+    if not execution_date:
+        logical_date = context.get('logical_date')
+        if logical_date:
+            execution_date = logical_date.strftime('%Y-%m-%d')
+        else:
+            execution_date = date.today().strftime('%Y-%m-%d')
+            logger.warning(f"No execution date in context, using today: {execution_date}")
+    
     execution_dt = datetime.strptime(execution_date, '%Y-%m-%d').date()
     today = date.today()
     

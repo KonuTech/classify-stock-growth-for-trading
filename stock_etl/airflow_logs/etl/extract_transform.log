@@ -1,0 +1,6 @@
+2025-08-18 11:18:44,947 - extract_transform - INFO - extract_and_transform_data:323 - Extracting data for 2025-08-18 - instruments: all
+2025-08-18 11:18:44,960 - extract_transform - INFO - extract_and_transform_data:398 - Extraction completed: 3 records in 8ms
+2025-08-18 11:26:38,491 - extract_transform - INFO - extract_and_transform_data:323 - Extracting data for 2025-08-18 - instruments: all
+2025-08-18 11:26:38,504 - extract_transform - INFO - extract_and_transform_data:398 - Extraction completed: 3 records in 9ms
+2025-08-18 11:28:42,796 - extract_transform - INFO - extract_and_transform_data:323 - Extracting data for 2025-08-18 - instruments: all
+2025-08-18 11:28:42,809 - extract_transform - INFO - extract_and_transform_data:398 - Extraction completed: 3 records in 9ms

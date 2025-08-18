@@ -48,14 +48,17 @@ services:
     volumes:
       - ./stock_etl/airflow_dags:/opt/airflow/dags
       - ./stock_etl:/opt/airflow/stock_etl
-      - airflow_logs:/opt/airflow/logs
+      - ./stock_etl/airflow_logs:/opt/airflow/logs
+      - ./scripts:/opt/airflow/scripts
     command: >
       bash -c "
-        pip install holidays psycopg2-binary &&
-        airflow standalone
+        pip install holidays psycopg2-binary structlog &&
+        export PYTHONPATH=/opt/airflow/stock_etl:$PYTHONPATH &&
+        airflow standalone &
+        (sleep 60 && /opt/airflow/scripts/setup-airflow-connections.sh) &
+        wait
       "
 
 volumes:
   postgres_data:
-  airflow_logs:
   pgadmin_data:
