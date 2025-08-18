@@ -3,18 +3,19 @@
 # Default target
 help:
 	@echo "Available commands:"
-	@echo "  make start              - 🚀 COMPLETE DEPLOYMENT: services + schemas + DAGs (recommended)"
-	@echo "  make init-dev           - Initialize dev environment + trigger dev DAG"
-	@echo "  make init-test          - Initialize test environment + trigger test DAG"  
-	@echo "  make init-prod          - Initialize prod environment + trigger prod DAG"
+	@echo "  make start              - 🚀 COMPLETE DEPLOYMENT: services + schemas + DAGs + credentials"
+	@echo "  make start-services     - Start Docker services only (no schemas/credentials)"
+	@echo "  make init-dev           - Initialize dev environment + trigger dev DAG (no credentials)"
+	@echo "  make init-test          - Initialize test environment + trigger test DAG (no credentials)"  
+	@echo "  make init-prod          - Initialize prod environment + trigger prod DAG (no credentials)"
+	@echo "  make extract-credentials - Extract service credentials to .env file"
 	@echo "  make setup-airflow      - Setup Airflow database connections only"
 	@echo "  make trigger-dev-dag    - Trigger development ETL DAG"
 	@echo "  make trigger-test-dag   - Trigger test ETL DAG"
 	@echo "  make trigger-prod-dag   - Trigger production ETL DAG"
 	@echo "  make stop               - Stop all services"
 	@echo "  make restart            - Restart all services with complete setup"
-	@echo "  make extract-credentials - Extract credentials to .env file"
-	@echo "  make clean              - Stop services and clean up (removes logs)"
+	@echo "  make clean              - Stop services and clean up completely"
 	@echo "  make help               - Show this help"
 
 # Start services with complete setup (all schemas + airflow + DAGs)
@@ -22,7 +23,7 @@ start:
 	@echo "Starting all services..."
 	docker-compose up -d postgres pgadmin airflow
 	@echo "Waiting for services to initialize..."
-	@sleep 70
+	@sleep 30
 	@make extract-credentials
 	@echo "Setting up all database schemas..."
 	@sleep 5
@@ -138,8 +139,15 @@ extract-credentials:
 	cp .env .env.sample; \
 	echo "📋 Credentials also copied to .env.sample for reference"
 
+# Start services only (without credential extraction)
+start-services:
+	@echo "Starting Docker services..."
+	docker-compose up -d postgres pgadmin airflow
+	@echo "Waiting for services to initialize..."
+	@sleep 70
+
 # Complete development environment initialization
-init-dev: start
+init-dev: start-services
 	@echo "Setting up development environment..."
 	@sleep 5
 	@echo "Initializing dev_stock_data schema..."
@@ -151,9 +159,10 @@ init-dev: start
 	@make trigger-dev-dag
 	@echo "🌐 Airflow UI: http://localhost:8080"
 	@echo "📊 pgAdmin: http://localhost:5050"
+	@echo "💡 Note: Run 'make extract-credentials' to get service credentials"
 
 # Complete test environment initialization  
-init-test: start
+init-test: start-services
 	@echo "Setting up test environment..."
 	@sleep 5
 	@echo "Initializing test_stock_data schema..."
@@ -165,9 +174,10 @@ init-test: start
 	@make trigger-test-dag
 	@echo "🌐 Airflow UI: http://localhost:8080"
 	@echo "📊 pgAdmin: http://localhost:5050"
+	@echo "💡 Note: Run 'make extract-credentials' to get service credentials"
 
 # Complete production environment initialization
-init-prod: start
+init-prod: start-services
 	@echo "Setting up production environment..."
 	@sleep 5
 	@echo "Initializing prod_stock_data schema..."
@@ -177,6 +187,7 @@ init-prod: start
 	@echo "✅ Production environment infrastructure ready!"
 	@echo "🌐 Airflow UI: http://localhost:8080"
 	@echo "📊 pgAdmin: http://localhost:5050"
+	@echo "💡 Note: Run 'make extract-credentials' to get service credentials"
 
 # Fix schema permissions for Airflow database user
 fix-schema-permissions:
@@ -210,13 +221,25 @@ trigger-prod-dag:
 	@docker-compose exec airflow airflow dags trigger prod_stock_etl_pipeline
 	@echo "✅ Production DAG triggered"
 
-# Clean up everything
+# Clean up everything including Docker images and containers
 clean:
 	@echo "Cleaning up..."
-	docker-compose down -v
+	@echo "Stopping and removing containers..."
+	docker-compose down -v --remove-orphans
+	@echo "Force stopping any remaining containers..."
+	docker stop $$(docker ps -q) 2>/dev/null || echo "No running containers to stop"
+	@echo "Removing all containers..."
+	docker rm $$(docker ps -aq) -f 2>/dev/null || echo "No containers to remove"
+	@echo "Removing Docker images..."
+	docker rmi apache/airflow:3.0.4-python3.12 -f 2>/dev/null || echo "Airflow image not found"
+	docker rmi postgres:17-alpine -f 2>/dev/null || echo "PostgreSQL image not found"
+	docker rmi dpage/pgadmin4:latest -f 2>/dev/null || echo "pgAdmin image not found"
+	@echo "Removing all untagged images..."
+	docker rmi $$(docker images -q) -f 2>/dev/null || echo "No images to remove"
+	docker system prune -a --volumes -f
 	@if [ -f .env ]; then rm .env; fi
 	@echo "Removing old Airflow logs..."
 	@rm -rf stock_etl/airflow_logs/dag_id=*
 	@rm -rf stock_etl/airflow_logs/dag_processor/*
 	@rm -rf stock_etl/airflow_logs/etl/*.log
-	@echo "Cleanup complete"
+	@echo "Complete cleanup finished"

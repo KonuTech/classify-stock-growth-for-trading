@@ -247,10 +247,15 @@ def get_polish_market_symbols() -> Dict[str, InstrumentType]:
     return {
         # Stocks
         'XTB': InstrumentType.STOCK,
-        'PKN': InstrumentType.STOCK,
-        'CCC': InstrumentType.STOCK,
-        'LPP': InstrumentType.STOCK,
         'CDR': InstrumentType.STOCK,
+        'ELT': InstrumentType.STOCK,
+        'DVL': InstrumentType.STOCK,
+        'BDX': InstrumentType.STOCK,
+        'PLW': InstrumentType.STOCK,
+        'KTY': InstrumentType.STOCK,
+        'PZU': InstrumentType.STOCK,
+        'RBW': InstrumentType.STOCK,
+        'GPW': InstrumentType.STOCK,
         
         # Indices
         'WIG': InstrumentType.INDEX,
