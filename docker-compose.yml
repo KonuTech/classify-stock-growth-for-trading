@@ -2,15 +2,14 @@ services:
   postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_DB: stock_data
+      POSTGRES_DB: postgres  # Default database for initial connection
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Automatic SQL initialization (commented out for manual control)
-      # - ./sql:/docker-entrypoint-initdb.d
+      - ./sql/init-databases.sql:/docker-entrypoint-initdb.d/01-init-databases.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 30s
@@ -38,10 +37,12 @@ services:
         condition: service_healthy
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://postgres:postgres@postgres:5432/stock_data
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow_metadata?options=-csearch_path%3Dairflow
       - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=True
+      # Business database connection for DAGs
+      - STOCK_DB_CONN=postgresql+psycopg2://stock:stock@postgres:5432/stock_data
     ports:
       - "8080:8080"
     volumes:

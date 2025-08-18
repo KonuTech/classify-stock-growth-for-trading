@@ -29,7 +29,7 @@ restart: stop start
 # Extract credentials from logs and save to .env
 extract-credentials:
 	@echo "Extracting service credentials..."
-	@# Extract Airflow password from logs
+	@# Extract Airflow password from logs using scripts
 	@AIRFLOW_PASSWORD=$$(docker-compose logs airflow 2>/dev/null | grep "Password for user 'admin':" | tail -1 | sed -n "s/.*Password for user 'admin': \(.*\)/\1/p"); \
 	if [ -f .env ]; then \
 		sed -i '/^AIRFLOW_/d' .env; \
@@ -57,7 +57,20 @@ extract-credentials:
 	echo "POSTGRES_PORT=5432" >> .env; \
 	echo "POSTGRES_USER=postgres" >> .env; \
 	echo "POSTGRES_PASSWORD=postgres" >> .env; \
-	echo "POSTGRES_DB=stock_data" >> .env; \
+	echo "" >> .env; \
+	echo "# Airflow Metadata Database" >> .env; \
+	echo "AIRFLOW_DB_HOST=localhost" >> .env; \
+	echo "AIRFLOW_DB_PORT=5432" >> .env; \
+	echo "AIRFLOW_DB_NAME=airflow_metadata" >> .env; \
+	echo "AIRFLOW_DB_USER=airflow" >> .env; \
+	echo "AIRFLOW_DB_PASSWORD=airflow" >> .env; \
+	echo "" >> .env; \
+	echo "# Stock Business Database" >> .env; \
+	echo "STOCK_DB_HOST=localhost" >> .env; \
+	echo "STOCK_DB_PORT=5432" >> .env; \
+	echo "STOCK_DB_NAME=stock_data" >> .env; \
+	echo "STOCK_DB_USER=stock" >> .env; \
+	echo "STOCK_DB_PASSWORD=stock" >> .env; \
 	echo ""; \
 	echo "=== ALL SERVICE CREDENTIALS ==="; \
 	echo "Airflow Web UI: http://localhost:8080"; \
@@ -72,13 +85,22 @@ extract-credentials:
 	echo "  Email: admin@admin.com"; \
 	echo "  Password: admin"; \
 	echo ""; \
-	echo "PostgreSQL Database: localhost:5432"; \
+	echo "PostgreSQL Admin: localhost:5432"; \
 	echo "  Username: postgres"; \
 	echo "  Password: postgres"; \
-	echo "  Database: stock_data"; \
+	echo ""; \
+	echo "Airflow Metadata DB: localhost:5432/airflow_metadata"; \
+	echo "  Username: airflow"; \
+	echo "  Password: airflow"; \
+	echo ""; \
+	echo "Stock Business DB: localhost:5432/stock_data"; \
+	echo "  Username: stock"; \
+	echo "  Password: stock"; \
 	echo ""; \
 	echo "All credentials saved to .env file"; \
-	echo "================================"
+	echo "================================"; \
+	cp .env .env.sample; \
+	echo "📋 Credentials also copied to .env.sample for reference"
 
 # Clean up everything
 clean:
