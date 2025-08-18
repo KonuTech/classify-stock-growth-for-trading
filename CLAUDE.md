@@ -32,7 +32,22 @@ This is a stock data ETL pipeline project that extracts financial data from Stoo
 
 ## Essential Commands
 
-### Development Setup
+### Complete Infrastructure Deployment
+```bash
+# 🚀 COMPLETE DEPLOYMENT: services + schemas + DAGs (recommended)
+make start
+
+# Alternative: Initialize specific environment
+make init-dev    # Initialize dev environment + trigger dev DAG
+make init-test   # Initialize test environment + trigger test DAG
+make init-prod   # Initialize prod environment + trigger prod DAG
+
+# Manual development setup
+uv sync --group dev
+docker-compose up -d postgres pgadmin airflow
+```
+
+### Individual Environment Setup
 ```bash
 # Install dependencies
 uv sync
@@ -40,53 +55,66 @@ uv sync
 # Install with development dependencies
 uv sync --group dev
 
-# Start PostgreSQL and Airflow services
-docker-compose up -d
-
-# Initialize development database with dummy data
-stock-etl database init-dev
-
-# Initialize clean test database
-stock-etl database init-test
+# Initialize specific database schemas
+uv run python -m stock_etl.cli database init-dev
+uv run python -m stock_etl.cli database init-test
 
 # Test database connectivity
-stock-etl database test-connection --schema stock_data_test
+uv run python -m stock_etl.cli database test-connection --schema dev_stock_data
 ```
 
 ### ETL Operations
 ```bash
 # Extract sample Polish market data
-stock-etl extract sample --output-dir data --delay 2.0
+uv run python -m stock_etl.cli extract sample --output-dir data --delay 2.0
 
 # Extract single symbol
-stock-etl extract symbol XTB --type stock --output-dir data
+uv run python -m stock_etl.cli extract symbol XTB --type stock --output-dir data
 
 # Load sample data into database
-stock-etl load sample --schema stock_data_test
+uv run python -m stock_etl.cli load sample --schema dev_stock_data
 
 # Load single symbol
-stock-etl load symbol XTB --type stock --schema stock_data_test
+uv run python -m stock_etl.cli load symbol XTB --type stock --schema dev_stock_data
 
 # Run complete ETL pipeline
-stock-etl pipeline --schema stock_data_test
+uv run python -m stock_etl.cli pipeline --schema dev_stock_data
+```
+
+### Makefile Automation Commands
+```bash
+# Infrastructure management
+make help                    # Show all available commands
+make start                   # Complete deployment (recommended)
+make stop                    # Stop all services
+make restart                 # Restart with complete setup
+make clean                   # Stop and remove all data/logs
+
+# Environment management
+make trigger-dev-dag         # Trigger development ETL DAG
+make trigger-test-dag        # Trigger test ETL DAG
+make trigger-prod-dag        # Trigger production ETL DAG
+make setup-airflow           # Setup Airflow connections only
+make fix-schema-permissions  # Fix database permissions
+make extract-credentials     # Extract service credentials to .env
 ```
 
 ### Code Quality
 ```bash
 # Format code
-black stock_etl/ tests/
+uv run black stock_etl/ tests/
 
 # Lint code
-ruff check stock_etl/ tests/
+uv run ruff check stock_etl/ tests/
 
 # Type checking
-mypy stock_etl/
+uv run mypy stock_etl/
 
 # Run tests (basic test file available)
-python test_etl.py
+uv run python test_etl.py
 
 # Run tests with pytest (if tests/ directory is populated)
-pytest tests/ -v --cov=stock_etl
+uv run pytest tests/ -v --cov=stock_etl
 ```
 
 ## Database Schemas
@@ -102,9 +130,9 @@ pytest tests/ -v --cov=stock_etl
 - **data_quality_metrics**: Automated data validation results
 
 ### Schema Initialization Files
-- `sql/01_dev_schema_normalized.sql`: Development schema with dummy data
-- `sql/02_dev_dummy_data.sql`: Sample data for development
-- `sql/03_test_schema_normalized.sql`: Clean test schema
+- `sql/schema_template.sql.j2`: Unified Jinja2 template for all environments
+- `sql/dev_dummy_data.sql`: Sample data for development
+- `sql/init-databases.sql`: Multi-database initialization script
 
 ## Environment Configuration
 
@@ -119,44 +147,64 @@ DB_PASSWORD=postgres
 ```
 
 ### Docker Services
-- PostgreSQL: Available on port 5432
-- Airflow Webserver: Available on port 8080 (admin/u8Zt2hYnsqXM4MNw)
-- Airflow uses LocalExecutor with PostgreSQL backend
+- **PostgreSQL 17**: Available on port 5432 (postgres/postgres)
+- **Airflow 3.0.4**: Available on port 8080 (admin/auto-generated-password)
+- **pgAdmin**: Available on port 5050 (admin@admin.com/admin)
+- **Airflow Metadata DB**: localhost:5432/airflow_metadata (airflow/airflow)
+- **Stock Business DB**: localhost:5432/stock_data (stock/stock)
 
 ### Docker Management
 ```bash
 # View service logs
 docker-compose logs -f postgres
 docker-compose logs -f airflow
+docker-compose logs -f pgadmin
 
-# Restart services
+# Restart services (automated)
+make restart
+
+# Manual restart
 docker-compose restart
 
-# Stop and remove all containers/volumes (full reset)
-docker-compose down -v
+# Complete infrastructure reset
+make clean
 ```
 
 ## Airflow Integration
 
-### Unified DAG Architecture
-The `stock_etl_unified_pipeline` DAG in `stock_etl/airflow_dags/stock_etl_dag.py` provides:
+### Multi-Environment DAG Architecture ✅ WORKING
+Dynamic environment-specific DAGs in `stock_etl/airflow_dags/stock_etl_dag.py`:
 
+- **Environment-Specific DAGs**: `dev_stock_etl_pipeline` (active), `test_stock_etl_pipeline` (paused), `prod_stock_etl_pipeline` (paused)
 - **Smart Execution Mode Detection**: Automatically detects backfill vs incremental runs
 - **Polish Trading Calendar Integration**: Uses `polish_trading_calendar.py` for market day validation
 - **Comprehensive ETL Job Tracking**: Full lifecycle tracking with Airflow context
 - **Data Quality Validation**: Automated OHLC validation and anomaly detection
 - **Error Handling and Retry Logic**: Graceful failure handling with detailed logging
+- **Automated Connections**: postgres_default and postgres_stock connections configured via docker-compose
 
-### DAG Configuration Parameters
+### Environment Configurations
 ```python
-# Default DAG parameters (configurable via Airflow UI)
-{
-    "schema": "prod_stock_data",      # Target database schema
-    "mode": "incremental",           # incremental | backfill
-    "instruments": "all",            # all | specific symbols
-    "data_sources": "stooq",         # Data source configuration
-    "enable_validation": true,       # Enable data quality checks
-    "batch_size": 50                 # Processing batch size
+# Environment-specific DAG configurations
+ENVIRONMENTS = {
+    'dev': {
+        'schema': 'dev_stock_data',
+        'schedule': None,                # Manual triggering
+        'retries': 1,
+        'catchup': False
+    },
+    'test': {
+        'schema': 'test_stock_data',
+        'schedule': None,                # Manual triggering
+        'retries': 1,
+        'catchup': False
+    },
+    'prod': {
+        'schema': 'prod_stock_data',
+        'schedule': '0 18 * * 1-5',      # 6 PM weekdays
+        'retries': 2,
+        'catchup': True
+    }
 }
 ```
 
@@ -170,26 +218,43 @@ The `stock_etl_unified_pipeline` DAG in `stock_etl/airflow_dags/stock_etl_dag.py
 
 ### Manual DAG Operations
 ```bash
-# Trigger DAG via Airflow CLI
-docker-compose exec airflow airflow dags trigger stock_etl_unified_pipeline \
-  --conf '{"schema": "dev_stock_data", "mode": "incremental"}'
+# Trigger environment-specific DAGs
+make trigger-dev-dag     # Recommended: via Makefile
+make trigger-test-dag
+make trigger-prod-dag
 
-# Test specific date (backfill)
-docker-compose exec airflow airflow dags test stock_etl_unified_pipeline "2025-08-15" \
-  --conf '{"schema": "dev_stock_data", "mode": "backfill"}'
+# Direct Airflow CLI commands
+docker-compose exec airflow airflow dags trigger dev_stock_etl_pipeline
+docker-compose exec airflow airflow dags trigger test_stock_etl_pipeline
+docker-compose exec airflow airflow dags trigger prod_stock_etl_pipeline
 
 # List DAG runs
-docker-compose exec airflow airflow dags list-runs -d stock_etl_unified_pipeline
+docker-compose exec airflow airflow dags list-runs dev_stock_etl_pipeline
 
-# Check DAG status and next runs
-docker-compose exec airflow airflow dags show stock_etl_unified_pipeline
+# Check DAG status
+docker-compose exec airflow airflow dags show dev_stock_etl_pipeline
 
 # Monitor task logs
-docker-compose exec airflow airflow tasks logs stock_etl_unified_pipeline extract_and_transform 2025-08-17
+docker-compose exec airflow airflow tasks logs dev_stock_etl_pipeline extract_and_transform 2025-08-18
 
 # Clear DAG run for retry
-docker-compose exec airflow airflow dags clear -c stock_etl_unified_pipeline
+docker-compose exec airflow airflow dags clear dev_stock_etl_pipeline
 ```
+
+### Current Operational Status (August 2025)
+**✅ VALIDATION COMPLETE**: Dynamic multi-environment DAG system operational
+
+**Recent Test Results:**
+- Development DAG: ✅ Successfully executed (latest run: success)
+- Database Connections: ✅ postgres_default and postgres_stock working
+- Schema Permissions: ✅ dev_stock_data and test_stock_data accessible
+- Trading Calendar Integration: ✅ Polish market calendar validation active
+- ETL Job Tracking: ✅ Comprehensive metadata and lifecycle tracking
+
+**DAG Status:**
+- `dev_stock_etl_pipeline`: Active (is_paused = False)
+- `test_stock_etl_pipeline`: Paused (is_paused = True)
+- `prod_stock_etl_pipeline`: Paused (is_paused = True)
 
 ### ETL Job Monitoring
 ```bash
@@ -328,18 +393,19 @@ schema_type: "production" → Production-ready with full constraints
 ## Infrastructure & Operations Assessment (August 2025)
 
 ### Project Status Analysis
-**Current State**: Production-ready ETL pipeline with comprehensive infrastructure (94% complete, 17/18 tasks)
+**Current State**: Production-ready ETL pipeline with comprehensive infrastructure (97% complete, 18/19 tasks)
 
 **Key Achievements:**
 - ✅ Complete PostgreSQL 17 + Airflow 3.0.4 containerized infrastructure
 - ✅ Database separation architecture (airflow_metadata vs stock_data databases)
 - ✅ Unified Jinja2 schema template system for multi-environment deployment
 - ✅ Production validation with 58,470+ real market records (100% success rate)
-- ✅ Comprehensive Airflow DAG with trading calendar integration
+- ✅ Dynamic multi-environment Airflow DAGs with trading calendar integration
 - ✅ Automated credential management and service orchestration via Makefile
+- ✅ **NEW**: Dynamic DAG system operational with successful dev environment execution
 
 ### Remaining Operations Tasks
-The final 6% centers on production monitoring and alerting capabilities:
+The final 3% centers on production monitoring and alerting capabilities:
 
 1. **Health Check System**: ETL pipeline health endpoints and status monitoring
 2. **Alerting Framework**: Data quality failure notifications and SLA monitoring
