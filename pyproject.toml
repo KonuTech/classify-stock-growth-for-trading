@@ -21,6 +21,9 @@ dependencies = [
     "jupyterlab>=4.4.6",
     "matplotlib>=3.10.5",
     "seaborn>=0.13.2",
+    "plotly>=5.17.0",
+    "numpy>=1.26.0",
+    "holidays>=0.34",
 ]
 
 [project.optional-dependencies]
