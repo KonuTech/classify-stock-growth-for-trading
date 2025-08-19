@@ -505,7 +505,7 @@ Options:
 
 Class weights (class_weight='balanced' in sklearn).
 
-Resampling techniques: SMOTE, ADASYN, or undersampling.
+⚠️ **For financial time series**: Avoid synthetic resampling (SMOTE, ADASYN) - use class_weight='balanced' instead to preserve temporal integrity.
 
 ❌ Preprocessing NOT needed for Random Forests
 
