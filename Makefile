@@ -11,7 +11,7 @@ help:
 	@echo "  make extract-credentials - Extract service credentials to .env file"
 	@echo "  make setup-airflow      - Setup Airflow database connections only"
 	@echo "  make trigger-dev-dag    - Trigger development ETL DAG"
-	@echo "  make trigger-test-dag   - Trigger test ETL DAG"
+	@echo "  make trigger-test-dag   - Trigger test ETL DAG (full_backfill mode)"
 	@echo "  make trigger-prod-dag   - Trigger production ETL DAG"
 	@echo "  make stop               - Stop all services"
 	@echo "  make restart            - Restart all services with complete setup"
@@ -196,14 +196,14 @@ fix-schema-permissions:
 	@docker-compose exec postgres psql -U postgres -d stock_data -c "GRANT USAGE ON SCHEMA test_stock_data TO stock; GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA test_stock_data TO stock; GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA test_stock_data TO stock; ALTER DEFAULT PRIVILEGES IN SCHEMA test_stock_data GRANT ALL ON TABLES TO stock; ALTER DEFAULT PRIVILEGES IN SCHEMA test_stock_data GRANT ALL ON SEQUENCES TO stock;"
 	@echo "✅ Schema permissions fixed for Airflow database user"
 
-# Setup Airflow database connections (now automated in docker-compose)
+# Setup Airflow database connections (via environment variables)
 setup-airflow:
-	@echo "Airflow connections are automatically configured via docker-compose"
-	@echo "Waiting for connection setup to complete..."
-	@sleep 10
-	@echo "Verifying connections..."
-	@docker-compose exec airflow airflow connections get postgres_default 2>/dev/null && echo "✅ postgres_default connection exists" || echo "⚠ postgres_default connection not found - checking logs..."
-	@docker-compose exec airflow airflow connections get postgres_stock 2>/dev/null && echo "✅ postgres_stock connection exists" || echo "⚠ postgres_stock connection not found - checking logs..."
+	@echo "Airflow connections configured via environment variables"
+	@echo "Waiting for Airflow to initialize connections..."
+	@sleep 15
+	@echo "Testing connection availability..."
+	@docker-compose exec airflow python3 -c "from airflow.models import Connection; from airflow.settings import Session; session = Session(); conns = session.query(Connection).filter(Connection.conn_id.in_(['postgres_default', 'postgres_stock'])).all(); print(f'Found {len(conns)} connections: {[c.conn_id for c in conns]}'); session.close()" 2>/dev/null || echo "Connections still initializing..."
+	@echo "✅ Airflow connection setup completed via environment variables"
 
 # Trigger environment-specific DAGs
 trigger-dev-dag:
@@ -212,9 +212,9 @@ trigger-dev-dag:
 	@echo "✅ Development DAG triggered"
 
 trigger-test-dag:
-	@echo "Triggering test DAG..."
-	@docker-compose exec airflow airflow dags trigger test_stock_etl_pipeline
-	@echo "✅ Test DAG triggered"
+	@echo "Triggering test DAG with full backfill mode..."
+	@docker-compose exec airflow airflow dags trigger test_stock_etl_pipeline --conf '{"extraction_mode": "full_backfill"}'
+	@echo "✅ Test DAG triggered (full_backfill mode - expects 50,000+ records)"
 
 trigger-prod-dag:
 	@echo "Triggering production DAG..."

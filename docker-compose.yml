@@ -37,26 +37,24 @@ services:
         condition: service_healthy
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow_metadata?options=-csearch_path%3Dairflow
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://postgres:postgres@postgres:5432/stock_data
       - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=True
-      # Business database connection for DAGs
-      - STOCK_DB_CONN=postgresql+psycopg2://stock:stock@postgres:5432/stock_data
+      # Airflow connections via environment variables
+      - AIRFLOW_CONN_POSTGRES_DEFAULT=postgresql://postgres:postgres@postgres:5432/stock_data
+      - AIRFLOW_CONN_POSTGRES_STOCK=postgresql://postgres:postgres@postgres:5432/stock_data
     ports:
       - "8080:8080"
     volumes:
       - ./stock_etl/airflow_dags:/opt/airflow/dags
       - ./stock_etl:/opt/airflow/stock_etl
       - ./stock_etl/airflow_logs:/opt/airflow/logs
-      - ./scripts:/opt/airflow/scripts
     command: >
       bash -c "
-        pip install holidays psycopg2-binary structlog requests pydantic tenacity pytz &&
+        pip install holidays psycopg2-binary &&
         export PYTHONPATH=/opt/airflow:$PYTHONPATH &&
-        airflow standalone &
-        (sleep 60 && /opt/airflow/scripts/setup-airflow-connections.sh) &
-        wait
+        airflow standalone
       "
 
 volumes:

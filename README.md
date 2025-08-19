@@ -96,9 +96,13 @@ make start
 # - Initialize dev_stock_data and test_stock_data schemas with unified ID design
 # - Set up database permissions for multi-user access
 # - Configure Airflow connections automatically (postgres_default, postgres_stock)
-# - Trigger development and test environment DAGs
+# - Trigger development DAG (incremental mode)
+# - Trigger test environment DAG (FULL_BACKFILL mode - 50,000+ records)
 # - Extract all service credentials to .env file
 # - Display access URLs and credentials
+
+# ⚠️  NOTE: make start automatically runs test DAG in full_backfill mode
+# This will download complete historical data (~5-10 minutes processing time)
 ```
 
 ### 3. Manual Step-by-Step Setup (Alternative)
@@ -128,13 +132,13 @@ make extract-credentials
 ```bash
 # Recommended: Use Makefile commands for automated pipeline execution
 
-# Trigger development environment DAG (with sample data)
+# Trigger development environment DAG (incremental mode - sample data)
 make trigger-dev-dag
 
-# Trigger test environment DAG (with real Stooq data)
+# Trigger test environment DAG (FULL_BACKFILL mode - all historical Stooq data)
 make trigger-test-dag
 
-# Trigger production environment DAG
+# Trigger production environment DAG (incremental mode)
 make trigger-prod-dag
 
 # Note: Data is automatically loaded during environment initialization
@@ -479,6 +483,29 @@ The system automatically determines processing mode based on:
    - Current data → Incremental (1 record)
 3. **DAG Execution Context** (backfill vs regular)
 4. **Safety Default** (incremental mode)
+
+#### 🔒 Duplicate Data Prevention
+
+**Running full_backfill multiple times will NOT create duplicate data.** The system is designed to be **idempotent**:
+
+**Deduplication Mechanisms:**
+- **UPSERT Logic**: `ON CONFLICT (stock_id, trading_date_local) DO UPDATE SET...`
+- **Unique Constraints**: One record per instrument per trading day
+- **Hash-based Detection**: `raw_data_hash` field tracks data changes
+- **Update Strategy**: Latest data overwrites existing records
+
+**What happens on re-run:**
+- **New Data**: Gets inserted normally
+- **Existing Data**: Gets updated with latest values from Stooq  
+- **ETL Tracking**: New job record created, but price data is deduplicated
+- **Final Result**: Same dataset regardless of how many times you run it
+
+**Safe to re-run full_backfill:**
+```bash
+# This is safe to run multiple times - no duplicates created
+docker-compose exec airflow airflow dags trigger test_stock_etl_pipeline \
+  --conf '{"extraction_mode": "full_backfill"}'
+```
 
 ## 📈 Monitoring & Observability
 
