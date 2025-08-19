@@ -1,6 +1,9 @@
 python3 -m venv .venv
 source .venv/bin/activate
 
+uv run --with jupyter jupyter lab
+
+
 uv init
 uv sync
 uv add pip

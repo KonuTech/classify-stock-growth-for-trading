@@ -1,7 +1,0 @@
-2025-08-18 11:18:48,131 - etl_finalization - ERROR - finalize_etl_session:876 - Error in ETL finalization: can't subtract offset-naive and offset-aware datetimes
-2025-08-18 11:23:48,548 - etl_finalization - ERROR - finalize_etl_session:880 - Error in ETL finalization: can't subtract offset-naive and offset-aware datetimes
-2025-08-18 11:24:18,635 - etl_finalization - ERROR - finalize_etl_session:880 - Error in ETL finalization: 'NoneType' object has no attribute 'get'
-2025-08-18 11:25:11,711 - etl_finalization - INFO - finalize_etl_session:852 - No job_id found - skipping database update (likely testing mode)
-2025-08-18 11:25:11,717 - etl_finalization - ERROR - finalize_etl_session:885 - Error in ETL finalization: 'NoneType' object is not subscriptable
-2025-08-18 11:26:41,125 - etl_finalization - ERROR - finalize_etl_session:885 - Error in ETL finalization: can't subtract offset-naive and offset-aware datetimes
-2025-08-18 11:28:46,015 - etl_finalization - INFO - finalize_etl_session:887 - ETL session completed: Job 4 finished with status 'completed'

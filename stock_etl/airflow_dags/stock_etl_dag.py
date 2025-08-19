@@ -414,7 +414,9 @@ def ensure_reference_data_exists(cursor, target_schema, logger):
 
 def load_data_to_database(**context) -> Dict[str, Any]:
     """
-    Load transformed data with comprehensive metadata tracking.
+    Load transformed data with incremental commits per instrument.
+    Each instrument (stock/index) is processed and committed individually,
+    providing better fault tolerance and immediate visibility of progress.
     
     Returns:
         Load operation results
@@ -441,7 +443,7 @@ def load_data_to_database(**context) -> Dict[str, Any]:
                 ensure_reference_data_exists(cursor, target_schema, logger)
                 conn.commit()  # Commit reference data before processing
                 
-                # Process stock data
+                # Process stock data with incremental commits
                 for stock_data in extract_results['data']['stocks']:
                     try:
                         instrument_start_time = time.time()
@@ -545,24 +547,36 @@ def load_data_to_database(**context) -> Dict[str, Any]:
                             1, processing_time_ms, 1, 'stooq', 'completed'
                         ))
                         
+                        # Commit after each stock instrument is processed
+                        conn.commit()
+                        logger.debug(f"Successfully processed and committed stock {stock_data['symbol']}")
+                        
                     except Exception as e:
                         records_failed += 1
                         logger.error(f"Failed to process stock {stock_data['symbol']}: {e}")
                         
-                        # Insert error detail
-                        cursor.execute(f"""
-                        INSERT INTO {target_schema}.etl_job_details (
-                            job_id, symbol, instrument_type,
-                            target_date, target_date_epoch, records_processed,
-                            error_message, processing_order, data_source, status
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        """, (
-                            job_id, stock_data['symbol'], 'stock',
-                            stock_data['trading_date'], int(stock_data['trading_date'].strftime('%s')),
-                            0, str(e), 1, 'stooq', 'failed'
-                        ))
+                        # Rollback current transaction for this instrument
+                        conn.rollback()
+                        
+                        # Insert error detail in a separate transaction
+                        try:
+                            cursor.execute(f"""
+                            INSERT INTO {target_schema}.etl_job_details (
+                                job_id, symbol, instrument_type,
+                                target_date, target_date_epoch, records_processed,
+                                error_message, processing_order, data_source, status
+                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            """, (
+                                job_id, stock_data['symbol'], 'stock',
+                                stock_data['trading_date'], int(stock_data['trading_date'].strftime('%s')),
+                                0, str(e), 1, 'stooq', 'failed'
+                            ))
+                            conn.commit()  # Commit error record
+                        except Exception as error_log_ex:
+                            logger.error(f"Failed to log error for {stock_data['symbol']}: {error_log_ex}")
+                            conn.rollback()
                 
-                # Process index data (similar pattern)
+                # Process index data with incremental commits
                 for index_data in extract_results['data']['indices']:
                     try:
                         instrument_start_time = time.time()
@@ -659,11 +673,34 @@ def load_data_to_database(**context) -> Dict[str, Any]:
                             1, processing_time_ms, 2, 'stooq', 'completed'
                         ))
                         
+                        # Commit after each index instrument is processed
+                        conn.commit()
+                        logger.debug(f"Successfully processed and committed index {index_data['symbol']}")
+                        
                     except Exception as e:
                         records_failed += 1
                         logger.error(f"Failed to process index {index_data['symbol']}: {e}")
-                
-                conn.commit()
+                        
+                        # Rollback current transaction for this instrument
+                        conn.rollback()
+                        
+                        # Insert error detail in a separate transaction
+                        try:
+                            cursor.execute(f"""
+                            INSERT INTO {target_schema}.etl_job_details (
+                                job_id, symbol, instrument_type,
+                                target_date, target_date_epoch, records_processed,
+                                error_message, processing_order, data_source, status
+                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            """, (
+                                job_id, index_data['symbol'], 'index',
+                                index_data['trading_date'], int(index_data['trading_date'].strftime('%s')),
+                                0, str(e), 2, 'stooq', 'failed'
+                            ))
+                            conn.commit()  # Commit error record
+                        except Exception as error_log_ex:
+                            logger.error(f"Failed to log error for {index_data['symbol']}: {error_log_ex}")
+                            conn.rollback()
         
         total_processing_time = int((time.time() - start_time) * 1000)
         total_processed = records_inserted + records_updated + records_failed

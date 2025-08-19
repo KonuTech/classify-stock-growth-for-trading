@@ -24,7 +24,6 @@ start:
 	docker-compose up -d postgres pgadmin airflow
 	@echo "Waiting for services to initialize..."
 	@sleep 30
-	@make extract-credentials
 	@echo "Setting up all database schemas..."
 	@sleep 5
 	@echo "Initializing dev_stock_data schema..."
@@ -46,6 +45,9 @@ start:
 	@echo "🚀 DAGs: dev_stock_etl_pipeline ✅ test_stock_etl_pipeline ✅"
 	@echo "🌐 Airflow UI: http://localhost:8080"
 	@echo "📊 pgAdmin: http://localhost:5050"
+	@echo "Waiting for Airflow to fully initialize credentials..."
+	@sleep 20
+	@make extract-credentials
 
 # Stop all services
 stop:
