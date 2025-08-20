@@ -9,10 +9,11 @@ import psycopg2
 from typing import Tuple, Optional, List, Dict
 import logging
 from datetime import datetime
+from pathlib import Path
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Set up logging using centralized configuration
+from .logging_config import get_ml_logger
+logger = get_ml_logger(__name__)
 
 
 class MultiStockDataExtractor:
@@ -162,14 +163,23 @@ class MultiStockDataExtractor:
             'negative_volume': (df['volume'] < 0).sum(),
         }
         
-        logger.debug(f"Data quality check for {symbol}: {checks}")
+        # Always log data quality checks at INFO level
+        logger.info(f"Data quality check for {symbol}: {checks}")
         
+        # Log specific issues as warnings
         if checks['non_positive_prices'] > 0:
             logger.warning(f"{symbol}: Found {checks['non_positive_prices']} non-positive prices")
         if checks['negative_volume'] > 0:
             logger.warning(f"{symbol}: Found {checks['negative_volume']} negative volumes")
         if checks['duplicate_dates'] > 0:
             logger.warning(f"{symbol}: Found {checks['duplicate_dates']} duplicate dates")
+        
+        # Log summary of data quality status
+        total_issues = sum(checks.values())
+        if total_issues == 0:
+            logger.info(f"{symbol}: ✅ Data quality validation passed")
+        else:
+            logger.warning(f"{symbol}: ⚠️ Found {total_issues} total data quality issues")
             
     def filter_stocks_by_data_quality(self, all_data: Dict[str, pd.DataFrame], 
                                     min_records: int = 500,
@@ -222,16 +232,53 @@ class MultiStockDataExtractor:
         if abs(train_ratio + val_ratio + test_ratio - 1.0) > 1e-6:
             raise ValueError("Ratios must sum to 1.0")
             
+        # Get symbol for logging (if available)
+        symbol = df['symbol'].iloc[0] if 'symbol' in df.columns and not df.empty else 'unknown'
+        
+        # Log input data characteristics
+        if not df.empty:
+            date_range_days = (df['trading_date_local'].max() - df['trading_date_local'].min()).days
+            date_range_years = date_range_days / 365.25
+            logger.info(f"📊 Time series split for {symbol}: {len(df)} records over {date_range_years:.1f} years ({date_range_days} days)")
+            logger.info(f"   Date range: {df['trading_date_local'].min().date()} to {df['trading_date_local'].max().date()}")
+            logger.info(f"   Split ratios: Train {train_ratio:.1%}, Val {val_ratio:.1%}, Test {test_ratio:.1%}")
+        else:
+            logger.warning(f"⚠️  Empty DataFrame provided for chronological split ({symbol})")
+            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+            
         # Sort by date to ensure chronological order
         df_sorted = df.sort_values('trading_date_local').reset_index(drop=True)
         
         n = len(df_sorted)
         train_size = int(train_ratio * n)
         val_size = int(val_ratio * n)
+        test_size = n - train_size - val_size  # Ensure all records are accounted for
         
         train_df = df_sorted.iloc[:train_size].copy()
         val_df = df_sorted.iloc[train_size:train_size + val_size].copy()
         test_df = df_sorted.iloc[train_size + val_size:].copy()
+        
+        # Log split results with detailed information
+        logger.info(f"✅ Time series split completed for {symbol}:")
+        logger.info(f"   📈 Train: {len(train_df)} records ({len(train_df)/n:.1%}) | {train_df['trading_date_local'].min().date()} to {train_df['trading_date_local'].max().date()}")
+        logger.info(f"   📊 Val:   {len(val_df)} records ({len(val_df)/n:.1%}) | {val_df['trading_date_local'].min().date()} to {val_df['trading_date_local'].max().date()}")
+        logger.info(f"   📋 Test:  {len(test_df)} records ({len(test_df)/n:.1%}) | {test_df['trading_date_local'].min().date()} to {test_df['trading_date_local'].max().date()}")
+        
+        # Verify no data leakage (chronological order)
+        if (not train_df.empty and not val_df.empty and 
+            train_df['trading_date_local'].max() >= val_df['trading_date_local'].min()):
+            logger.warning(f"⚠️  Potential data leakage detected in {symbol}: Train max date >= Val min date")
+            
+        if (not val_df.empty and not test_df.empty and 
+            val_df['trading_date_local'].max() >= test_df['trading_date_local'].min()):
+            logger.warning(f"⚠️  Potential data leakage detected in {symbol}: Val max date >= Test min date")
+            
+        # Verify split integrity
+        total_split_records = len(train_df) + len(val_df) + len(test_df)
+        if total_split_records != n:
+            logger.error(f"❌ Split integrity check failed for {symbol}: {total_split_records} != {n}")
+        else:
+            logger.debug(f"✅ Split integrity verified for {symbol}: {total_split_records} == {n}")
         
         return train_df, val_df, test_df
         
@@ -253,6 +300,8 @@ class MultiStockDataExtractor:
         """
         split_data = {}
         
+        logger.info(f"🔄 Starting chronological data splits for {len(all_data)} stocks")
+        
         for symbol, df in all_data.items():
             try:
                 train_df, val_df, test_df = self.split_data_chronologically(
@@ -260,14 +309,11 @@ class MultiStockDataExtractor:
                 )
                 split_data[symbol] = (train_df, val_df, test_df)
                 
-                logger.info(f"{symbol} split:")
-                logger.info(f"  Train: {len(train_df)} records ({train_df['trading_date_local'].min().date()} to {train_df['trading_date_local'].max().date()})")
-                logger.info(f"  Val:   {len(val_df)} records ({val_df['trading_date_local'].min().date()} to {val_df['trading_date_local'].max().date()})")
-                logger.info(f"  Test:  {len(test_df)} records ({test_df['trading_date_local'].min().date()} to {test_df['trading_date_local'].max().date()})")
-                
             except Exception as e:
-                logger.error(f"Failed to split data for {symbol}: {e}")
+                logger.error(f"❌ Failed to split data for {symbol}: {e}")
                 continue
+                
+        logger.info(f"✅ Completed chronological splits for {len(split_data)}/{len(all_data)} stocks")
                 
         return split_data
         

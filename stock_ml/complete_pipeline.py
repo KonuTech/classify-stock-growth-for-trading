@@ -1,5 +1,5 @@
 """
-Complete Random Forest stock growth classification pipeline.
+Complete XGBoost stock growth classification pipeline.
 Integrates data extraction, feature engineering, model training, and backtesting.
 """
 
@@ -14,18 +14,19 @@ import json
 try:
     from .data_extractor import MultiStockDataExtractor
     from .feature_engineering import StockFeatureEngineer
-    from .preprocessing import RandomForestPreprocessor
-    from .model_trainer import MultiStockRandomForestTrainer
+    from .preprocessing import XGBoostPreprocessor
+    from .model_trainer import MultiStockXGBoostTrainer
     from .backtesting import TradingBacktester
 except ImportError:
     from data_extractor import MultiStockDataExtractor
     from feature_engineering import StockFeatureEngineer
-    from preprocessing import RandomForestPreprocessor
-    from model_trainer import MultiStockRandomForestTrainer
+    from preprocessing import XGBoostPreprocessor
+    from model_trainer import MultiStockXGBoostTrainer
     from backtesting import TradingBacktester
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+# Set up logging using centralized configuration
+from .logging_config import get_ml_logger
+logger = get_ml_logger(__name__)
 
 
 class StockGrowthClassificationPipeline:
@@ -50,8 +51,8 @@ class StockGrowthClassificationPipeline:
         # Initialize components
         self.extractor = MultiStockDataExtractor(db_config)
         self.engineer = StockFeatureEngineer()
-        self.preprocessor = RandomForestPreprocessor(random_state)
-        self.trainer = MultiStockRandomForestTrainer(random_state)
+        self.preprocessor = XGBoostPreprocessor(random_state)
+        self.trainer = MultiStockXGBoostTrainer(random_state)
         self.backtester = TradingBacktester()
         
         # Pipeline state

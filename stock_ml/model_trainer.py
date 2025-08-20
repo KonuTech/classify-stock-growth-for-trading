@@ -1,6 +1,7 @@
 """
-Random Forest model training module for stock growth classification.
+XGBoost model training module for stock growth classification.
 Implements hyperparameter optimization, model training, and evaluation.
+Handles missing values natively and provides superior performance on financial data.
 """
 
 import pandas as pd
@@ -12,7 +13,7 @@ import pickle
 import os
 from pathlib import Path
 
-from sklearn.ensemble import RandomForestClassifier
+import xgboost as xgb
 from sklearn.model_selection import GridSearchCV, StratifiedKFold, cross_val_score
 from sklearn.metrics import (
     classification_report, confusion_matrix, roc_auc_score, 
@@ -24,12 +25,13 @@ import seaborn as sns
 import warnings
 
 warnings.filterwarnings('ignore')
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Set up logging using centralized configuration
+from .logging_config import get_ml_logger
+logger = get_ml_logger(__name__)
 
 
-class RandomForestTrainer:
-    """Random Forest model trainer with hyperparameter optimization"""
+class XGBoostTrainer:
+    """XGBoost model trainer with hyperparameter optimization and native NaN handling"""
     
     def __init__(self, random_state: int = 42, n_jobs: int = -1):
         self.random_state = random_state
@@ -42,47 +44,51 @@ class RandomForestTrainer:
         
     def define_hyperparameter_grid(self, grid_type: str = 'comprehensive') -> Dict:
         """
-        Define hyperparameter grid for grid search
+        Define XGBoost hyperparameter grid for grid search
         
         Args:
             grid_type: Type of grid ('quick', 'comprehensive', 'production')
             
         Returns:
-            Parameter grid dictionary
+            XGBoost parameter grid dictionary
         """
         if grid_type == 'quick':
             # Fast grid for testing
             param_grid = {
                 'n_estimators': [100, 200],
-                'max_depth': [15, 20],
-                'min_samples_split': [2, 5],
-                'min_samples_leaf': [1, 2],
-                'class_weight': ['balanced', None]
+                'max_depth': [6, 8],
+                'learning_rate': [0.1, 0.2],
+                'subsample': [0.8, 1.0],
+                'colsample_bytree': [0.8, 1.0],
+                'reg_alpha': [0, 0.1],
+                'reg_lambda': [1]
             }
         elif grid_type == 'comprehensive':
             # Comprehensive grid for thorough optimization
             param_grid = {
-                'n_estimators': [100, 200, 300, 500],
-                'max_depth': [10, 15, 20, 25, None],
-                'min_samples_split': [2, 5, 10],
-                'min_samples_leaf': [1, 2, 4],
-                'max_features': ['sqrt', 'log2', None],
-                'class_weight': ['balanced', 'balanced_subsample', None]
+                'n_estimators': [100, 200, 300],
+                'max_depth': [4, 6, 8, 10],
+                'learning_rate': [0.05, 0.1, 0.15, 0.2],
+                'subsample': [0.7, 0.8, 0.9, 1.0],
+                'colsample_bytree': [0.7, 0.8, 0.9, 1.0],
+                'reg_alpha': [0, 0.01, 0.1, 0.5],
+                'reg_lambda': [1, 1.5, 2]
             }
         elif grid_type == 'production':
             # Production-optimized grid
             param_grid = {
-                'n_estimators': [200, 300, 500],
-                'max_depth': [15, 20, 25],
-                'min_samples_split': [2, 5],
-                'min_samples_leaf': [1, 2],
-                'max_features': ['sqrt', 'log2'],
-                'class_weight': ['balanced']
+                'n_estimators': [200, 300, 400],
+                'max_depth': [6, 8, 10],
+                'learning_rate': [0.05, 0.1, 0.15],
+                'subsample': [0.8, 0.9],
+                'colsample_bytree': [0.8, 0.9],
+                'reg_alpha': [0, 0.1],
+                'reg_lambda': [1, 1.5]
             }
         else:
             raise ValueError(f"Unknown grid_type: {grid_type}")
             
-        logger.info(f"Using {grid_type} hyperparameter grid with {np.prod([len(v) for v in param_grid.values()])} combinations")
+        logger.info(f"Using {grid_type} XGBoost hyperparameter grid with {np.prod([len(v) for v in param_grid.values()])} combinations")
         return param_grid
         
     def train_with_grid_search(self, X_train: pd.DataFrame, y_train: pd.Series,
@@ -92,12 +98,12 @@ class RandomForestTrainer:
                               cv_folds: int = 5,
                               scoring: str = 'roc_auc') -> Dict[str, Any]:
         """
-        Train Random Forest with hyperparameter optimization
+        Train XGBoost with hyperparameter optimization
         
         Args:
-            X_train: Training features
+            X_train: Training features (NaN values preserved)
             y_train: Training targets
-            X_val: Validation features  
+            X_val: Validation features (NaN values preserved)
             y_val: Validation targets
             symbol: Stock symbol for logging
             grid_type: Hyperparameter grid type
@@ -107,18 +113,24 @@ class RandomForestTrainer:
         Returns:
             Training results dictionary
         """
-        logger.info(f"{symbol}: Starting Random Forest training with grid search...")
+        logger.info(f"{symbol}: Starting XGBoost training with grid search...")
         start_time = datetime.now()
+        
+        # Calculate class balance for scale_pos_weight
+        pos_count = (y_train == 1).sum()
+        neg_count = (y_train == 0).sum()
+        scale_pos_weight = neg_count / pos_count if pos_count > 0 else 1.0
         
         # Get hyperparameter grid
         param_grid = self.define_hyperparameter_grid(grid_type)
         
-        # Initialize base model
-        rf = RandomForestClassifier(
+        # Initialize base XGBoost model
+        xgb_model = xgb.XGBClassifier(
             random_state=self.random_state,
             n_jobs=self.n_jobs,
-            bootstrap=True,
-            oob_score=True
+            scale_pos_weight=scale_pos_weight,
+            tree_method='hist',  # Efficient for large datasets
+            verbosity=0
         )
         
         # Set up cross-validation
@@ -126,7 +138,7 @@ class RandomForestTrainer:
         
         # Grid search
         grid_search = GridSearchCV(
-            estimator=rf,
+            estimator=xgb_model,
             param_grid=param_grid,
             cv=cv,
             scoring=scoring,
@@ -154,7 +166,6 @@ class RandomForestTrainer:
             'model': self.model,
             'best_params': self.best_params,
             'cv_score': self.cv_scores,
-            'oob_score': self.model.oob_score_,
             'val_accuracy': accuracy_score(y_val, val_predictions),
             'val_precision': precision_score(y_val, val_predictions),
             'val_recall': recall_score(y_val, val_predictions),
@@ -172,7 +183,6 @@ class RandomForestTrainer:
         
         logger.info(f"{symbol}: Training completed in {training_time:.1f} seconds")
         logger.info(f"{symbol}: Best CV score ({scoring}): {self.cv_scores:.4f}")
-        logger.info(f"{symbol}: OOB score: {results['oob_score']:.4f}")
         logger.info(f"{symbol}: Validation ROC-AUC: {results['val_roc_auc']:.4f}")
         logger.info(f"{symbol}: Best parameters: {self.best_params}")
         
@@ -256,7 +266,7 @@ class RandomForestTrainer:
         history = self.training_history[symbol]
         
         report_lines = [
-            f"RANDOM FOREST MODEL REPORT - {symbol}",
+            f"XGBOOST MODEL REPORT - {symbol}",
             "=" * 50,
             f"Training Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
             "",
@@ -266,7 +276,6 @@ class RandomForestTrainer:
             "",
             "CROSS-VALIDATION RESULTS:",
             f"  CV Score: {history['cv_score']:.4f}",
-            f"  OOB Score: {history['oob_score']:.4f}",
             "",
             "VALIDATION SET PERFORMANCE:",
             f"  Accuracy: {history['val_accuracy']:.4f}",
@@ -335,7 +344,7 @@ class RandomForestTrainer:
         logger.info(f"{symbol}: Model saved to {save_path}")
         
     @classmethod
-    def load_model(cls, load_path: str) -> 'RandomForestTrainer':
+    def load_model(cls, load_path: str) -> 'XGBoostTrainer':
         """Load trained model from disk"""
         with open(load_path, 'rb') as f:
             model_data = pickle.load(f)
@@ -372,8 +381,8 @@ class RandomForestTrainer:
         plt.show()
 
 
-class MultiStockRandomForestTrainer:
-    """Train Random Forest models for multiple stocks"""
+class MultiStockXGBoostTrainer:
+    """Train XGBoost models for multiple stocks"""
     
     def __init__(self, random_state: int = 42):
         self.random_state = random_state
@@ -384,7 +393,7 @@ class MultiStockRandomForestTrainer:
                             grid_type: str = 'comprehensive',
                             cv_folds: int = 5) -> Dict[str, Dict[str, Any]]:
         """
-        Train Random Forest models for multiple stocks
+        Train XGBoost models for multiple stocks
         
         Args:
             preprocessed_data: Dictionary mapping symbol -> preprocessed data
@@ -403,7 +412,7 @@ class MultiStockRandomForestTrainer:
                 logger.info(f"Training model for {symbol}...")
                 
                 # Initialize trainer for this stock
-                trainer = RandomForestTrainer(self.random_state)
+                trainer = XGBoostTrainer(self.random_state)
                 
                 # Train with grid search
                 train_results = trainer.train_with_grid_search(
@@ -462,8 +471,9 @@ class MultiStockRandomForestTrainer:
                 'test_f1': test_res['test_f1'],
                 'test_roc_auc': test_res['test_roc_auc'],
                 'training_time': train_res['training_time_seconds'],
-                'best_n_estimators': train_res['best_params']['n_estimators'],
-                'best_max_depth': train_res['best_params']['max_depth']
+                'best_n_estimators': train_res['best_params'].get('n_estimators', 'N/A'),
+                'best_max_depth': train_res['best_params'].get('max_depth', 'N/A'),
+                'best_learning_rate': train_res['best_params'].get('learning_rate', 'N/A')
             })
             
         return pd.DataFrame(summary_data).sort_values('test_roc_auc', ascending=False)
@@ -480,7 +490,7 @@ class MultiStockRandomForestTrainer:
         save_path.mkdir(parents=True, exist_ok=True)
         
         for symbol, trainer in self.trainers.items():
-            model_path = save_path / f"{symbol}_rf_model.pkl"
+            model_path = save_path / f"{symbol}_xgb_model.pkl"
             trainer.save_model(symbol, str(model_path))
             
         # Save results summary
@@ -503,9 +513,9 @@ if __name__ == "__main__":
         from data_extractor import MultiStockDataExtractor
         from feature_engineering import StockFeatureEngineer
     try:
-        from .preprocessing import RandomForestPreprocessor
+        from .preprocessing import XGBoostPreprocessor
     except ImportError:
-        from preprocessing import RandomForestPreprocessor
+        from preprocessing import XGBoostPreprocessor
     
     # Quick test with XTB data
     extractor = MultiStockDataExtractor()
@@ -524,11 +534,11 @@ if __name__ == "__main__":
         train_df, val_df, test_df = extractor.split_data_chronologically(engineered_df)
         
         # Preprocessing
-        preprocessor = RandomForestPreprocessor()
+        preprocessor = XGBoostPreprocessor()
         result = preprocessor.preprocess_single_stock(train_df, val_df, test_df, 'XTB', max_features=20)
         
         # Model training (quick grid for testing)
-        trainer = RandomForestTrainer()
+        trainer = XGBoostTrainer()
         train_results = trainer.train_with_grid_search(
             X_train=result['X_train'],
             y_train=result['y_train'],

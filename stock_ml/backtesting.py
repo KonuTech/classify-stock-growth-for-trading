@@ -12,8 +12,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Set up logging using centralized configuration
+from .logging_config import get_ml_logger
+logger = get_ml_logger(__name__)
 
 
 class TradingBacktester:

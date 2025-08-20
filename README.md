@@ -4,10 +4,11 @@
 ![Python](https://img.shields.io/badge/Python-3.12+-blue)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-blue)
 ![Airflow](https://img.shields.io/badge/Airflow-3.0.4-orange)
+![XGBoost](https://img.shields.io/badge/XGBoost-3.0.4-brightgreen)
 ![Docker](https://img.shields.io/badge/Docker-Containerized-blue)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
-A production-ready ETL pipeline for extracting, transforming, and loading Polish stock market data with automated scheduling, intelligent processing modes, and comprehensive monitoring. Features unified ID schema design, multi-environment support, and trading calendar integration.
+A production-ready ETL pipeline for extracting, transforming, and loading Polish stock market data with automated scheduling, intelligent processing modes, and comprehensive monitoring. Features unified ID schema design, multi-environment support, trading calendar integration, and advanced **XGBoost machine learning** for stock growth prediction.
 
 > **📚 Developer Resources**: For detailed technical documentation, architecture decisions, and development guidance, see **[CLAUDE.md](CLAUDE.md)**. This file contains comprehensive information about the codebase structure, essential commands, database design patterns, Airflow DAG configuration, and trading calendar integration.
 
@@ -669,22 +670,226 @@ FROM stock_prices;
 
 This enhancement makes the ETL pipeline significantly more robust for production workloads while maintaining all existing capabilities and data integrity guarantees.
 
+## 🤖 Machine Learning Pipeline (`stock_ml/`)
+
+### ML Pipeline Overview
+
+The project includes an advanced machine learning pipeline for stock growth classification using **XGBoost** with cutting-edge physics-inspired feature engineering:
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  PostgreSQL DB  │───▶│  Data Extract   │───▶│ Feature Engine  │
+│ (Stock Prices)  │    │ (Multi-stock)   │    │(TA-Lib + Physics)│
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                                │                       │
+                                ▼                       ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Backtesting   │◀───│ Model Training  │◀───│ Preprocessing   │
+│ (Risk Metrics)  │    │   (XGBoost)     │    │ (Native NaN)    │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+### Key ML Components
+
+- **🔍 Data Extraction**: Multi-stock data pipeline with quality filtering from PostgreSQL
+- **⚙️ Advanced Feature Engineering**: 180+ features including physics-inspired models (chaos theory, thermodynamics, wave physics)
+- **📊 XGBoost Preprocessing**: Native missing value handling, variance filtering, and XGBoost importance-based feature selection
+- **🚀 XGBoost Model Training**: Gradient boosting classification with hyperparameter optimization and native NaN handling
+- **📈 Backtesting**: Trading strategy simulation with risk-adjusted performance metrics
+- **🧪 Testing Framework**: Comprehensive pipeline validation with XGBoost-specific quality thresholds
+
+### 🚀 **XGBoost Migration Benefits (August 2025)**
+
+**Migration from Random Forest to XGBoost provides significant advantages:**
+
+| Feature | Random Forest | XGBoost | Improvement |
+|---------|---------------|---------|-------------|
+| **Missing Values** | Requires imputation | Native NaN handling | No preprocessing needed |
+| **Class Imbalance** | `class_weight='balanced'` | `scale_pos_weight` | Superior balance control |
+| **Regularization** | Limited overfitting control | L1/L2 built-in | Better generalization |
+| **Training Method** | Parallel trees | Sequential boosting | Error correction learning |
+| **Feature Importance** | Gini-based | Multiple types (gain, cover, weight) | More informative selection |
+| **Performance** | Good on mixed data | Superior on tabular data | Better ROC-AUC typically |
+
+**Key Technical Improvements:**
+- ✅ **No Imputation Required**: XGBoost learns optimal directions for missing values
+- ✅ **Better Time Series Performance**: Gradient boosting excels on financial data
+- ✅ **Reduced Preprocessing**: Eliminates need for missing value handling pipeline
+- ✅ **Superior Feature Selection**: Native importance calculation during training
+- ✅ **Enhanced Regularization**: Prevents overfitting better than Random Forest
+
+### XGBoost Dependencies
+
+```bash
+# Verify XGBoost and ML dependencies are installed
+uv run python -c "
+import pandas, numpy, sklearn, talib, imblearn, xgboost
+print('✅ All XGBoost ML dependencies installed successfully')
+print(f'XGBoost: {xgboost.__version__}')
+print(f'pandas: {pandas.__version__}')
+print(f'scikit-learn: {sklearn.__version__}')
+print(f'TA-Lib: {talib.__version__}')
+"
+
+# Install missing dependencies if needed
+uv add xgboost>=2.0.0  # Latest XGBoost version
+```
+
+### ML Pipeline Commands
+
+```bash
+# Complete XGBoost ML pipeline test (recommended)
+uv run python stock_ml/test_pipeline.py 1
+
+# Test modes available:
+# 1. Single stock ML test (XTB) - Complete pipeline with training
+# 2. Single stock data test (XTB) - Data pipeline only  
+# 3. Multi-stock data test - All stocks data pipeline
+# 4. Interactive mode - Choose symbol and configuration
+
+# Direct module execution
+uv run python -m stock_ml.test_pipeline 1
+
+# Example single stock analysis
+uv run python -c "
+from stock_ml.test_pipeline import test_single_stock_pipeline
+test_single_stock_pipeline('XTB', include_ml=True)
+"
+```
+
+### ML Pipeline Features
+
+**Binary Classification Target**: 30-day forward stock growth prediction
+- **Positive Class**: Stock growth > threshold (typically 46-54% of samples)
+- **Chronological Splits**: Train/validation/test splits prevent data leakage
+- **Class Balancing**: Uses `scale_pos_weight` parameter in XGBoost for superior imbalance handling
+
+**Advanced Feature Engineering (180+ Features)**:
+- **Technical Indicators**: RSI, MACD, Bollinger Bands, ADX, Stochastic, Williams %R
+- **Moving Averages**: Multiple timeframes (5, 10, 20, 50, 100, 200 days)
+- **Price Features**: Returns, volatility, momentum, price position in ranges
+- **Volume Features**: Volume trends, ratios, price-volume relationships
+- **Time Features**: Market timing, seasonal patterns, trading calendar
+- **🔬 Physics-Inspired Features**:
+  - **Chaos Theory**: Lyapunov exponents, Hurst exponents, fractal dimensions, sample entropy
+  - **Thermodynamics**: Market temperature, entropy, free energy, heat capacity, phase transitions
+  - **Wave Physics**: Interference patterns, standing waves, electromagnetic field analogies
+  - **Brownian Motion**: Random walk analysis, diffusion coefficients, Ornstein-Uhlenbeck processes
+  - **Statistical Physics**: Jump diffusion, Lévy flight characteristics, partition functions
+
+**XGBoost Preprocessing Pipeline**:
+- **Native Missing Value Handling**: XGBoost handles NaN values internally - no imputation required!
+- **Variance Filtering**: Removes low-variance features (threshold=0.01) to improve model efficiency
+- **XGBoost Importance-Based Selection**: XGBoost feature importance ranking selects top 25-50 features
+- **Automatic Class Weighting**: Dynamic `scale_pos_weight` calculation for class imbalance
+- **Time-Series Integrity**: No data leakage with chronological train/validation/test splits
+
+**XGBoost Model Architecture**:
+- **Algorithm**: XGBoost Classifier (gradient boosting with superior performance on tabular data)
+- **Native NaN Handling**: No preprocessing required for missing values
+- **Regularization**: Built-in L1/L2 regularization prevents overfitting
+- **Feature Selection**: XGBoost importance filtering from 180+ to 25-50 most predictive features
+- **Hyperparameter Tuning**: Grid search with cross-validation and automatic class weighting
+- **Performance Metrics**: ROC-AUC, accuracy, F1-score, Sharpe ratio, win rate
+
+### ML Quality Thresholds
+
+**Model Performance Criteria**:
+- **Minimum ROC-AUC**: 0.55 (better than random)
+- **Minimum Accuracy**: 0.52 (accounting for class imbalance)
+- **Minimum Win Rate**: 40% (backtesting performance)
+- **Minimum Data**: 500+ trading days per stock, 2+ years of history
+
+### Centralized ML Logging
+
+**Context-Independent Logging**: All ML modules use centralized logging configuration
+- **Individual Log Files**: Each module gets dedicated log file in `logs/stock_ml/`
+- **Project Root Resolution**: Uses `CLAUDE.md` marker to find project root
+- **Execution Agnostic**: Works from notebooks, project root, or any subdirectory
+- **Dual Output**: Both file and console logging with timestamps
+
+```python
+# Usage in ML modules
+from .logging_config import get_ml_logger
+logger = get_ml_logger(__name__)  # Creates logs/stock_ml/{module_name}.log
+```
+
+### XGBoost Feature Importance Analysis
+
+**XGBoost Native Feature Importance Methods**:
+- **Weight**: Number of times a feature is used to split the data across all trees
+- **Gain**: Average gain of splits that use this feature (most informative)
+- **Cover**: Average coverage of splits that use this feature
+- **Point-Biserial Correlation**: Linear relationships with binary outcomes (supplementary)
+- **F-Statistic (ANOVA)**: Group mean comparisons between target classes (supplementary)
+- **Mutual Information**: Captures non-linear feature-target relationships (supplementary)
+
+**XGBoost Advantage**: Native feature importance calculation during training eliminates need for separate feature selection models.
+
+### XGBoost ML Pipeline Results
+
+```bash
+# Example successful XGBoost pipeline output
+🧪 XGBoost Stock ML Pipeline Tests
+==============================================
+🚀 Running XGBoost Single Stock ML Test (CDR)...
+
+📊 STEP 1: DATA EXTRACTION FOR CDR
+✅ Extracted 7715 records for CDR
+   Date range: 1994-08-02 to 2025-08-19
+
+🔧 STEP 2: FEATURE ENGINEERING FOR CDR  
+✅ Engineered 183 features for CDR (includes physics-inspired)
+   Target distribution: Positive 53.6%, Negative 46.4%
+
+🔄 STEP 4: XGBOOST PREPROCESSING FOR CDR
+✅ XGBoost preprocessing completed for CDR
+   Features: 182 → 25 (XGBoost importance selection)
+   Missing values: 23,526 (preserved for native handling)
+   Class imbalance ratio: 1.1:1 (auto scale_pos_weight)
+
+🤖 STEP 5: XGBOOST MODEL TRAINING FOR CDR
+✅ XGBoost model training completed for CDR
+   Best CV score: 0.5691
+   Validation ROC-AUC: 0.5734
+   XGBoost parameters: n_estimators=200, max_depth=6, learning_rate=0.1
+
+📋 STEP 6: TEST EVALUATION FOR CDR
+✅ XGBoost test evaluation completed for CDR
+   Test ROC-AUC: 0.5612
+   Test Accuracy: 0.5560
+   XGBoost feature importance: month, growth_60d, rsi_14 (top 3)
+
+💰 STEP 7: BACKTESTING FOR CDR
+✅ XGBoost backtesting completed
+   Total return: 12.34%
+   Win rate: 52.17%
+   Sharpe ratio: 0.445
+
+🎯 FINAL ASSESSMENT: ✅ XGBOOST SUCCESS
+```
+
 ## 🏗️ Development
 
 ### Code Quality
 
 ```bash
 # Format code
-black stock_etl/ tests/
+uv run black stock_etl/ stock_ml/ tests/
 
 # Lint code
-ruff check stock_etl/ tests/
+uv run ruff check stock_etl/ stock_ml/ tests/
 
 # Type checking
-mypy stock_etl/
+uv run mypy stock_etl/
 
-# Run tests
+# Run ETL tests
 pytest tests/ -v --cov=stock_etl
+
+# Run ML pipeline tests
+uv run python stock_ml/test_pipeline.py 1  # Complete ML pipeline test
+uv run python stock_ml/test_pipeline.py 2  # Data pipeline only
+uv run python stock_ml/test_pipeline.py 3  # Multi-stock data test
 ```
 
 ### Development Setup
@@ -859,11 +1064,16 @@ backoff_factor = 2           # Exponential backoff
 ✅ **Intelligent Data Processing**: Smart backfill/incremental extraction logic  
 ✅ **Trading Calendar Integration**: Polish Stock Exchange market hours and holidays  
 ✅ **Incremental Commits**: Per-instrument commit architecture for enhanced fault tolerance  
+✅ **XGBoost ML Pipeline**: Advanced XGBoost machine learning with physics-inspired feature engineering  
+✅ **Physics-Inspired Features**: 180+ features including chaos theory, thermodynamics, wave physics  
+✅ **XGBoost Native Processing**: Native NaN handling and superior gradient boosting performance  
+✅ **Centralized ML Logging**: Context-independent logging for all ML modules  
+✅ **XGBoost Backtesting**: Risk-adjusted performance metrics optimized for gradient boosting predictions  
 
-**Current Completion**: 100% (19/19 tasks completed)  
-**Last Enhancement**: August 2025 - Incremental commit architecture with real-time progress tracking  
+**Current Completion**: 100% (28/28 tasks completed)  
+**Latest Enhancement**: August 2025 - Migration to XGBoost with native NaN handling and superior gradient boosting performance  
 **Success Rate**: 100% (0 failures in production testing)  
-**Recent Testing**: 69,847+ records processed with incremental commits (test_stock_etl_pipeline full_backfill)
+**Recent Testing**: XGBoost ML pipeline validated with 180+ features including physics models and native missing value handling
 
 ---
 

@@ -7,26 +7,26 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional, Tuple, Any
 import logging
-from sklearn.impute import SimpleImputer
 from sklearn.feature_selection import SelectFromModel, VarianceThreshold
 from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.ensemble import RandomForestClassifier
+import xgboost as xgb
 import warnings
 
 warnings.filterwarnings('ignore')
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Set up logging using centralized configuration
+from .logging_config import get_ml_logger
+logger = get_ml_logger(__name__)
 
-# Note: SMOTE removed - not appropriate for time series financial data
-# We'll use class_weight='balanced' in Random Forest instead
+# Using XGBoost for robust handling of missing values and financial time series
+# XGBoost natively handles NaN values and class imbalance via scale_pos_weight
 
 
-class RandomForestPreprocessor:
-    """Preprocessing pipeline for Random Forest training"""
+class XGBoostPreprocessor:
+    """Preprocessing pipeline for XGBoost training - preserves NaN values"""
     
     def __init__(self, random_state: int = 42):
         self.random_state = random_state
-        self.imputer = SimpleImputer(strategy='median')
+        # No imputer needed - XGBoost handles NaN natively
         self.variance_selector = VarianceThreshold(threshold=0.01)
         self.feature_selector = None
         self.label_encoders = {}
@@ -47,7 +47,9 @@ class RandomForestPreprocessor:
         # Define columns to exclude from features
         exclude_cols = {
             'symbol', 'currency', 'trading_date_local', 'close_price', 'volume',
-            'open_price', 'high_price', 'low_price', 'target', 'growth_future_30d'
+            'open_price', 'high_price', 'low_price', 'target', 'growth_future_30d',
+            # added manually:
+            'year', 'year_month', 'year_week', 'year_quarter'
         }
         
         # Get feature columns
@@ -73,7 +75,7 @@ class RandomForestPreprocessor:
     def handle_missing_values(self, X_train: pd.DataFrame, X_val: pd.DataFrame, 
                             X_test: pd.DataFrame, symbol: str) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """
-        Handle missing values using median imputation
+        Preserve missing values for XGBoost native handling
         
         Args:
             X_train: Training features
@@ -82,40 +84,29 @@ class RandomForestPreprocessor:
             symbol: Stock symbol for logging
             
         Returns:
-            Tuple of imputed DataFrames
+            Tuple of DataFrames with NaN values preserved
         """
-        logger.info(f"{symbol}: Handling missing values...")
+        logger.info(f"{symbol}: Preserving missing values for XGBoost native handling...")
         
-        # Check missing values before imputation
+        # Check missing values for logging
         train_missing = X_train.isnull().sum().sum()
         val_missing = X_val.isnull().sum().sum()
         test_missing = X_test.isnull().sum().sum()
         
         logger.info(f"{symbol}: Missing values - Train: {train_missing}, Val: {val_missing}, Test: {test_missing}")
         
-        # Fit imputer on training data
-        X_train_imputed = pd.DataFrame(
-            self.imputer.fit_transform(X_train),
-            columns=X_train.columns,
-            index=X_train.index
-        )
+        # Only remove completely empty columns (100% NaN)
+        completely_missing_cols = X_train.columns[X_train.isnull().all()].tolist()
+        if completely_missing_cols:
+            logger.warning(f"{symbol}: Dropping {len(completely_missing_cols)} completely missing columns: {completely_missing_cols[:5]}...")
+            X_train = X_train.drop(columns=completely_missing_cols)
+            X_val = X_val.drop(columns=completely_missing_cols)
+            X_test = X_test.drop(columns=completely_missing_cols)
         
-        # Transform validation and test data
-        X_val_imputed = pd.DataFrame(
-            self.imputer.transform(X_val),
-            columns=X_val.columns,
-            index=X_val.index
-        )
+        logger.info(f"{symbol}: XGBoost will handle {train_missing - len(completely_missing_cols) * len(X_train)} NaN values natively")
+        logger.info(f"{symbol}: Final feature count: {X_train.shape[1]}")
         
-        X_test_imputed = pd.DataFrame(
-            self.imputer.transform(X_test),
-            columns=X_test.columns,
-            index=X_test.index
-        )
-        
-        logger.info(f"{symbol}: Missing values after imputation - Train: {X_train_imputed.isnull().sum().sum()}")
-        
-        return X_train_imputed, X_val_imputed, X_test_imputed
+        return X_train, X_val, X_test
         
     def remove_low_variance_features(self, X_train: pd.DataFrame, X_val: pd.DataFrame,
                                    X_test: pd.DataFrame, symbol: str) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -157,7 +148,7 @@ class RandomForestPreprocessor:
                                     X_val: pd.DataFrame, X_test: pd.DataFrame,
                                     max_features: int = 50, symbol: str = "") -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """
-        Select features using Random Forest feature importance
+        Select features using XGBoost feature importance
         
         Args:
             X_train: Training features
@@ -170,19 +161,27 @@ class RandomForestPreprocessor:
         Returns:
             Tuple of feature-selected DataFrames
         """
-        logger.info(f"{symbol}: Selecting top {max_features} features by importance...")
+        logger.info(f"{symbol}: Selecting top {max_features} features by XGBoost importance...")
         
-        # Use Random Forest for feature selection
-        rf_selector = RandomForestClassifier(
-            n_estimators=100, 
+        # Calculate class weights for imbalanced data
+        pos_count = (y_train == 1).sum()
+        neg_count = (y_train == 0).sum()
+        scale_pos_weight = neg_count / pos_count if pos_count > 0 else 1.0
+        
+        # Use XGBoost for feature selection (handles NaN natively)
+        xgb_selector = xgb.XGBClassifier(
+            n_estimators=100,
+            max_depth=6,
+            learning_rate=0.1,
             random_state=self.random_state,
+            scale_pos_weight=scale_pos_weight,
             n_jobs=-1,
-            class_weight='balanced'
+            verbosity=0
         )
         
-        # Fit selector
+        # Fit selector - XGBoost handles NaN values automatically
         self.feature_selector = SelectFromModel(
-            rf_selector,
+            xgb_selector,
             max_features=max_features,
             threshold=-np.inf  # Select top max_features regardless of threshold
         )
@@ -201,7 +200,8 @@ class RandomForestPreprocessor:
         X_val_df = pd.DataFrame(X_val_selected, columns=self.selected_features, index=X_val.index)
         X_test_df = pd.DataFrame(X_test_selected, columns=self.selected_features, index=X_test.index)
         
-        logger.info(f"{symbol}: Selected {len(self.selected_features)} features")
+        logger.info(f"{symbol}: Selected {len(self.selected_features)} features using XGBoost")
+        logger.info(f"{symbol}: Class balance - Scale pos weight: {scale_pos_weight:.2f}")
         logger.debug(f"{symbol}: Selected features: {self.selected_features}")
         
         return X_train_df, X_val_df, X_test_df
@@ -235,9 +235,9 @@ class RandomForestPreprocessor:
         
         # Provide recommendations
         if analysis['imbalance_ratio'] > 3:
-            logger.warning(f"{symbol}: High class imbalance detected. Recommend using class_weight='balanced' in model.")
+            logger.warning(f"{symbol}: High class imbalance detected. Recommend using scale_pos_weight={analysis['imbalance_ratio']:.2f} in XGBoost.")
         elif analysis['imbalance_ratio'] > 2:
-            logger.info(f"{symbol}: Moderate class imbalance. class_weight='balanced' recommended.")
+            logger.info(f"{symbol}: Moderate class imbalance. scale_pos_weight={analysis['imbalance_ratio']:.2f} recommended.")
         else:
             logger.info(f"{symbol}: Classes relatively balanced.")
             
@@ -298,7 +298,7 @@ class RandomForestPreprocessor:
         
         logger.info(f"{symbol}: Preprocessing complete")
         logger.info(f"{symbol}: Features: {result['original_feature_count']} -> {result['final_feature_count']}")
-        logger.info(f"{symbol}: Training samples: {len(y_train)} (no synthetic balancing)")
+        logger.info(f"{symbol}: Training samples: {len(y_train)} (XGBoost handles imbalance natively)")
         
         return result
         
@@ -319,7 +319,7 @@ class RandomForestPreprocessor:
         for symbol, (train_df, val_df, test_df) in split_data.items():
             try:
                 # Create new preprocessor for each stock to avoid cross-contamination
-                stock_preprocessor = RandomForestPreprocessor(self.random_state)
+                stock_preprocessor = XGBoostPreprocessor(self.random_state)
                 
                 result = stock_preprocessor.preprocess_single_stock(
                     train_df, val_df, test_df, symbol, max_features
@@ -383,7 +383,7 @@ if __name__ == "__main__":
         split_data = extractor.split_all_stocks_data(engineered_data)
         
         # Preprocessing
-        preprocessor = RandomForestPreprocessor()
+        preprocessor = XGBoostPreprocessor()
         preprocessed_data = preprocessor.preprocess_multiple_stocks(split_data, max_features=30)
         
         # Summary

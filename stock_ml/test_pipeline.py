@@ -14,20 +14,20 @@ try:
     # Try relative imports first (when used as module)
     from .data_extractor import MultiStockDataExtractor
     from .feature_engineering import StockFeatureEngineer
-    from .preprocessing import RandomForestPreprocessor
-    from .model_trainer import RandomForestTrainer
+    from .preprocessing import XGBoostPreprocessor
+    from .model_trainer import XGBoostTrainer
     from .backtesting import TradingBacktester
 except ImportError:
     # Fall back to direct imports (when run as script)
     from data_extractor import MultiStockDataExtractor
     from feature_engineering import StockFeatureEngineer
-    from preprocessing import RandomForestPreprocessor
-    from model_trainer import RandomForestTrainer
+    from preprocessing import XGBoostPreprocessor
+    from model_trainer import XGBoostTrainer
     from backtesting import TradingBacktester
 
-# Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+# Set up logging using centralized configuration
+from .logging_config import get_ml_logger
+logger = get_ml_logger(__name__)
 
 
 def test_complete_pipeline():
@@ -37,7 +37,7 @@ def test_complete_pipeline():
     # Initialize components
     extractor = MultiStockDataExtractor()
     engineer = StockFeatureEngineer()
-    preprocessor = RandomForestPreprocessor()
+    preprocessor = XGBoostPreprocessor()
     
     try:
         # Step 1: Data Extraction
@@ -174,10 +174,10 @@ def test_single_stock_pipeline(symbol: str = 'XTB', include_ml: bool = True):
     
     extractor = MultiStockDataExtractor()
     engineer = StockFeatureEngineer()
-    preprocessor = RandomForestPreprocessor()
+    preprocessor = XGBoostPreprocessor()
     
     if include_ml:
-        trainer = RandomForestTrainer(random_state=42)
+        trainer = XGBoostTrainer(random_state=42)
         backtester = TradingBacktester(initial_capital=100000)
     
     try:
