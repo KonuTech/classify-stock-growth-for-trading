@@ -45,3 +45,36 @@
 2025-08-19 08:12:13,216 - extract_transform - INFO - _extract_stooq_data:1287 - Stooq extraction completed: 48183 stocks, 30858 indices
 2025-08-19 08:12:13,219 - extract_transform - INFO - extract_and_transform_data:351 - Data source tracking handled via ETL job metadata
 2025-08-19 08:12:13,220 - extract_transform - INFO - extract_and_transform_data:361 - Extraction completed: 79041 records in 5610ms
+2025-08-20 14:42:45,992 - extract_transform - INFO - extract_and_transform_data:332 - Extracting data for 2025-08-19 - environment: test - instruments: all
+2025-08-20 14:42:45,992 - extract_transform - INFO - extract_and_transform_data:339 - Using authentic Stooq data for test environment
+2025-08-20 14:42:46,009 - extract_transform - INFO - _extract_stooq_data:1175 - Extracting data for stock XTB: incremental mode (Default incremental mode for XTB)
+2025-08-20 14:42:46,701 - extract_transform - INFO - _extract_stooq_data:1222 - Successfully extracted incremental data for XTB
+2025-08-20 14:42:46,717 - extract_transform - INFO - _extract_stooq_data:1175 - Extracting data for stock CDR: incremental mode (Default incremental mode for CDR)
+2025-08-20 14:42:48,000 - extract_transform - INFO - _extract_stooq_data:1222 - Successfully extracted incremental data for CDR
+2025-08-20 14:42:48,022 - extract_transform - INFO - _extract_stooq_data:1175 - Extracting data for stock ELT: incremental mode (Default incremental mode for ELT)
+2025-08-20 14:42:48,808 - extract_transform - INFO - _extract_stooq_data:1222 - Successfully extracted incremental data for ELT
+2025-08-20 14:42:48,825 - extract_transform - INFO - _extract_stooq_data:1175 - Extracting data for stock DVL: incremental mode (Default incremental mode for DVL)
+2025-08-20 14:42:49,637 - extract_transform - INFO - _extract_stooq_data:1222 - Successfully extracted incremental data for DVL
+2025-08-20 14:42:49,660 - extract_transform - INFO - _extract_stooq_data:1175 - Extracting data for stock BDX: incremental mode (Default incremental mode for BDX)
+2025-08-20 14:42:50,924 - extract_transform - INFO - _extract_stooq_data:1222 - Successfully extracted incremental data for BDX
+2025-08-20 14:42:50,938 - extract_transform - INFO - _extract_stooq_data:1175 - Extracting data for stock PLW: incremental mode (Default incremental mode for PLW)
+2025-08-20 14:42:51,358 - extract_transform - INFO - _extract_stooq_data:1222 - Successfully extracted incremental data for PLW
+2025-08-20 14:42:51,382 - extract_transform - INFO - _extract_stooq_data:1175 - Extracting data for stock KTY: incremental mode (Default incremental mode for KTY)
+2025-08-20 14:42:52,808 - extract_transform - INFO - _extract_stooq_data:1222 - Successfully extracted incremental data for KTY
+2025-08-20 14:42:52,822 - extract_transform - INFO - _extract_stooq_data:1175 - Extracting data for stock PZU: incremental mode (Default incremental mode for PZU)
+2025-08-20 14:42:53,558 - extract_transform - INFO - _extract_stooq_data:1222 - Successfully extracted incremental data for PZU
+2025-08-20 14:42:53,574 - extract_transform - INFO - _extract_stooq_data:1175 - Extracting data for stock RBW: incremental mode (Default incremental mode for RBW)
+2025-08-20 14:42:54,344 - extract_transform - INFO - _extract_stooq_data:1222 - Successfully extracted incremental data for RBW
+2025-08-20 14:42:54,355 - extract_transform - INFO - _extract_stooq_data:1175 - Extracting data for stock GPW: incremental mode (Default incremental mode for GPW)
+2025-08-20 14:42:54,991 - extract_transform - INFO - _extract_stooq_data:1222 - Successfully extracted incremental data for GPW
+2025-08-20 14:42:55,007 - extract_transform - INFO - _extract_stooq_data:1236 - Extracting data for index WIG: incremental mode (Default incremental mode for WIG)
+2025-08-20 14:42:56,297 - extract_transform - INFO - _extract_stooq_data:1281 - Successfully extracted incremental data for WIG
+2025-08-20 14:42:56,315 - extract_transform - INFO - _extract_stooq_data:1236 - Extracting data for index WIG20: incremental mode (Default incremental mode for WIG20)
+2025-08-20 14:42:55,856 - extract_transform - INFO - _extract_stooq_data:1281 - Successfully extracted incremental data for WIG20
+2025-08-20 14:42:55,871 - extract_transform - INFO - _extract_stooq_data:1236 - Extracting data for index MWIG40: incremental mode (Default incremental mode for MWIG40)
+2025-08-20 14:42:57,071 - extract_transform - INFO - _extract_stooq_data:1281 - Successfully extracted incremental data for MWIG40
+2025-08-20 14:42:57,086 - extract_transform - INFO - _extract_stooq_data:1236 - Extracting data for index SWIG80: incremental mode (Default incremental mode for SWIG80)
+2025-08-20 14:42:58,598 - extract_transform - INFO - _extract_stooq_data:1281 - Successfully extracted incremental data for SWIG80
+2025-08-20 14:42:58,602 - extract_transform - INFO - _extract_stooq_data:1287 - Stooq extraction completed: 10 stocks, 4 indices
+2025-08-20 14:42:58,609 - extract_transform - INFO - extract_and_transform_data:351 - Data source tracking handled via ETL job metadata
+2025-08-20 14:42:58,614 - extract_transform - INFO - extract_and_transform_data:361 - Extraction completed: 14 records in 12641ms

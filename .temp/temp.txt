@@ -3,11 +3,14 @@ source .venv/bin/activate
 
 uv run --with jupyter jupyter lab
 
-
 uv init
 uv sync
 uv add pip
 uv sync
+
+
+uv run python stock_ml/test_pipeline.py 1
+
 
 Airflow UI Login:
 - Username: admin

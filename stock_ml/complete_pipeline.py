@@ -15,13 +15,13 @@ try:
     from .data_extractor import MultiStockDataExtractor
     from .feature_engineering import StockFeatureEngineer
     from .preprocessing import XGBoostPreprocessor
-    from .model_trainer import MultiStockXGBoostTrainer
+    from .model_trainer_optimized import MultiStockXGBoostTrainer
     from .backtesting import TradingBacktester
 except ImportError:
     from data_extractor import MultiStockDataExtractor
     from feature_engineering import StockFeatureEngineer
     from preprocessing import XGBoostPreprocessor
-    from model_trainer import MultiStockXGBoostTrainer
+    from model_trainer_optimized import MultiStockXGBoostTrainer
     from backtesting import TradingBacktester
 
 # Set up logging using centralized configuration

@@ -15,14 +15,14 @@ try:
     from .data_extractor import MultiStockDataExtractor
     from .feature_engineering import StockFeatureEngineer
     from .preprocessing import XGBoostPreprocessor
-    from .model_trainer import XGBoostTrainer
+    from .model_trainer_optimized import XGBoostTrainer
     from .backtesting import TradingBacktester
 except ImportError:
     # Fall back to direct imports (when run as script)
     from data_extractor import MultiStockDataExtractor
     from feature_engineering import StockFeatureEngineer
     from preprocessing import XGBoostPreprocessor
-    from model_trainer import XGBoostTrainer
+    from model_trainer_optimized import XGBoostTrainer
     from backtesting import TradingBacktester
 
 # Set up logging using centralized configuration
@@ -168,7 +168,7 @@ def test_complete_pipeline():
         extractor.close()
 
 
-def test_single_stock_pipeline(symbol: str = 'XTB', include_ml: bool = True):
+def test_single_stock_pipeline(symbol: str = 'XTB', include_ml: bool = True, force_cpu: bool = True):
     """Test complete pipeline for a single stock including ML training and backtesting"""
     logger.info(f"Testing {'complete ML' if include_ml else 'data'} pipeline for {symbol}...")
     
@@ -177,7 +177,8 @@ def test_single_stock_pipeline(symbol: str = 'XTB', include_ml: bool = True):
     preprocessor = XGBoostPreprocessor()
     
     if include_ml:
-        trainer = XGBoostTrainer(random_state=42)
+        # Use CPU-first configuration by default
+        trainer = XGBoostTrainer(random_state=42, force_cpu=force_cpu)
         backtester = TradingBacktester(initial_capital=100000)
     
     try:
@@ -332,8 +333,11 @@ if __name__ == "__main__":
         elif mode == "4":
             symbol = input("Enter stock symbol (default=XTB): ").strip() or "XTB"
             include_ml = input("Include ML training? (y/N): ").strip().lower() == 'y'
+            force_cpu = input("Force CPU mode? (y/N): ").strip().lower() == 'y' if include_ml else False
             print(f"\n🚀 Running {'Complete ML' if include_ml else 'Data'} Test for {symbol}...")
-            success = test_single_stock_pipeline(symbol, include_ml=include_ml)
+            if include_ml and force_cpu:
+                print("🔧 CPU mode forced - GPU acceleration disabled")
+            success = test_single_stock_pipeline(symbol, include_ml=include_ml, force_cpu=force_cpu)
             
         else:
             print("Invalid choice. Running default single stock ML test...")

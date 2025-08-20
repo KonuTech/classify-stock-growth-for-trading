@@ -8,6 +8,7 @@ wheels/
 .env
 .temp
 *.log
+*.ipynb
 
 # Virtual environments
 .venv

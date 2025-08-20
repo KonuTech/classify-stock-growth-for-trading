@@ -1,5 +1,5 @@
 """
-Backtesting framework for Random Forest trading strategy.
+Backtesting framework for XGBoost trading strategy.
 Simulates trading based on model predictions and evaluates performance.
 """
 
@@ -18,7 +18,7 @@ logger = get_ml_logger(__name__)
 
 
 class TradingBacktester:
-    """Backtest trading strategies based on Random Forest predictions"""
+    """Backtest trading strategies based on XGBoost predictions"""
     
     def __init__(self, initial_capital: float = 100000.0, 
                  transaction_cost: float = 0.001,

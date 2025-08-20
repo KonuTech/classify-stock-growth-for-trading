@@ -64,6 +64,9 @@ restart-airflow:
 	docker-compose rm -f airflow
 	docker-compose up -d airflow
 	@echo "Airflow restarted with updated dependencies"
+	@echo "Waiting for Airflow to fully initialize credentials..."
+	@sleep 20
+	@make extract-credentials
 
 # Extract credentials from logs and save to .env
 extract-credentials:

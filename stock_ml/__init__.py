@@ -8,7 +8,7 @@ Includes data extraction, feature engineering, model training, and backtesting c
 from .data_extractor import MultiStockDataExtractor
 from .feature_engineering import StockFeatureEngineer
 from .preprocessing import XGBoostPreprocessor
-from .model_trainer import XGBoostTrainer, MultiStockXGBoostTrainer
+from .model_trainer_optimized import XGBoostTrainer, MultiStockXGBoostTrainer, HighPerformanceXGBoostTrainer
 from .backtesting import TradingBacktester
 from .complete_pipeline import StockGrowthClassificationPipeline
 
@@ -20,6 +20,7 @@ __all__ = [
     'StockFeatureEngineer', 
     'XGBoostPreprocessor',
     'XGBoostTrainer',
+    'HighPerformanceXGBoostTrainer',
     'MultiStockXGBoostTrainer',
     'TradingBacktester',
     'StockGrowthClassificationPipeline'

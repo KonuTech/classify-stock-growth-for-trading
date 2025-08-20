@@ -1,5 +1,5 @@
 """
-Data preprocessing module for Random Forest model training.
+Data preprocessing module for XGBoost model training.
 Handles missing values, feature selection, and data preparation.
 """
 

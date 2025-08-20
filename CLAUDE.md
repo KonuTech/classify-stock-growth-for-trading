@@ -373,7 +373,7 @@ logger = get_ml_logger(__name__)  # Creates logs/stock_ml/{module_name}.log
 - **stock_ml.data_extractor**: Multi-stock data extraction from PostgreSQL with quality filtering
 - **stock_ml.feature_engineering**: TA-Lib technical indicators and market features
 - **stock_ml.preprocessing**: Data preprocessing with feature selection (no SMOTE - inappropriate for time series)
-- **stock_ml.model_trainer**: Random Forest classification with grid search optimization
+- **stock_ml.model_trainer_optimized**: GPU-accelerated XGBoost classification with grid search optimization
 - **stock_ml.backtesting**: Trading strategy backtesting with performance metrics
 - **stock_ml.test_pipeline**: Comprehensive testing framework for ML pipeline validation
 - **stock_ml.logging_config**: Centralized logging utility for consistent ML module logging
@@ -383,7 +383,7 @@ logger = get_ml_logger(__name__)  # Creates logs/stock_ml/{module_name}.log
 2. **Feature Engineering**: Technical indicators (RSI, MACD, Bollinger Bands, etc.) using TA-Lib
 3. **Target Generation**: Binary classification for stock growth prediction (30-day forward returns)
 4. **Data Preprocessing**: Missing value handling, feature selection, no synthetic balancing
-5. **Model Training**: Random Forest with `class_weight='balanced'` for imbalanced data
+5. **Model Training**: XGBoost with `scale_pos_weight` parameter for imbalanced data
 6. **Backtesting**: Trading strategy evaluation with risk-adjusted performance metrics
 
 ### Essential ML Commands
@@ -423,8 +423,8 @@ test_single_stock_pipeline('XTB', include_ml=True)
 - **Market Structure**: Support/resistance levels, trend indicators
 
 **Model Architecture**:
-- **Algorithm**: Random Forest Classifier (handles non-linear relationships well)
-- **Feature Selection**: Top 25-50 features selected by Random Forest importance
+- **Algorithm**: XGBoost Classifier (GPU-accelerated gradient boosting with native NaN handling)
+- **Feature Selection**: Top 25-50 features selected by XGBoost importance
 - **Hyperparameter Tuning**: Grid search with cross-validation
 - **Validation Strategy**: Time-series aware train/validation/test splits
 
@@ -513,8 +513,8 @@ test_single_stock_pipeline('XTB', include_ml=True)
 ### ML Pipeline Design Patterns
 - **Time Series Awareness**: Chronological splits prevent data leakage
 - **Feature Engineering**: TA-Lib integration for reliable technical indicators
-- **Class Imbalance**: Uses `class_weight='balanced'` instead of SMOTE (inappropriate for time series)
-- **Model Selection**: Random Forest chosen for interpretability and robustness
+- **Class Imbalance**: Uses `scale_pos_weight` parameter in XGBoost instead of SMOTE (inappropriate for time series)
+- **Model Selection**: XGBoost chosen for superior performance on tabular data and native missing value handling
 - **Backtesting Framework**: Walk-forward analysis with realistic trading costs
 
 ## Trading Calendar & DAG Utilities
@@ -589,7 +589,7 @@ schema_type: "production" → Production-ready with full constraints
 - ✅ Dynamic multi-environment Airflow DAGs with trading calendar integration
 - ✅ Automated credential management and service orchestration via Makefile
 - ✅ **NEW**: Dynamic DAG system operational with successful dev environment execution
-- ✅ **NEW**: Complete ML pipeline with TA-Lib technical indicators and Random Forest classification
+- ✅ **NEW**: Complete ML pipeline with TA-Lib technical indicators and GPU-accelerated XGBoost classification
 - ✅ **NEW**: Comprehensive backtesting framework with risk-adjusted performance metrics
 
 ### Project Enhancement Opportunities
@@ -672,10 +672,10 @@ WHERE started_at >= CURRENT_DATE - INTERVAL '30 days';
 - Volume-based indicators and market microstructure features
 
 **Model Training & Evaluation**:
-- Random Forest classification with hyperparameter tuning
+- XGBoost classification with GPU acceleration and hyperparameter tuning
 - Time-series aware train/validation/test splits
-- Feature selection via Random Forest importance
-- Class imbalance handling with `class_weight='balanced'`
+- Feature selection via XGBoost native importance scoring
+- Class imbalance handling with `scale_pos_weight` parameter
 
 **Backtesting & Performance**:
 - Trading strategy simulation with realistic transaction costs
