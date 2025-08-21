@@ -10,7 +10,7 @@ Provides database operations for ML pipeline artifacts including:
 """
 
 from typing import Dict, List, Any, Optional
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import json
 import logging
 import numpy as np
@@ -112,7 +112,7 @@ class MLDatabaseOperations:
                 'training_records': training_results.get('train_size', 0),
                 'validation_records': training_results.get('val_size', 0),
                 'test_records': training_results.get('test_size', 0),
-                'training_start_date': datetime.now().date() - pd.DateOffset(years=2),
+                'training_start_date': (datetime.now() - pd.DateOffset(years=2)).date(),
                 'training_end_date': datetime.now().date(),
                 'model_file_path': model_file_path,
                 'model_file_hash': model_hash,
@@ -283,7 +283,16 @@ class MLDatabaseOperations:
         
         with self.db.get_session() as session:
             for i, (pred, prob, pred_date) in enumerate(zip(predictions, probabilities, test_dates)):
-                target_date = pred_date + pd.DateOffset(days=7)  # 7-day prediction horizon
+                # Handle target date calculation - add 7 days using timedelta
+                if isinstance(pred_date, date):
+                    target_date = pred_date + timedelta(days=7)
+                    # Convert date to datetime for timestamp calculation
+                    pred_datetime = datetime.combine(pred_date, datetime.min.time())
+                    trading_date_epoch = int(pred_datetime.timestamp())
+                else:
+                    # pred_date is already datetime
+                    target_date = (pred_date + timedelta(days=7)).date()
+                    trading_date_epoch = int(pred_date.timestamp())
                 
                 session.execute(text('''
                     INSERT INTO ml_predictions (
@@ -303,9 +312,9 @@ class MLDatabaseOperations:
                     'model_id': model_id,
                     'instrument_id': instrument_id,
                     'prediction_date': pred_date,
-                    'target_date': target_date.date(),
+                    'target_date': target_date,
                     'prediction_horizon_days': 7,
-                    'trading_date_epoch': int(pred_date.timestamp()),
+                    'trading_date_epoch': trading_date_epoch,
                     'predicted_class': bool(pred),
                     'prediction_probability': float(prob),
                     'prediction_confidence': abs(float(prob) - 0.5) * 2,  # Convert to confidence [0,1]
@@ -372,7 +381,7 @@ class MLDatabaseOperations:
             '''), {
                 'model_id': model_id,
                 'instrument_id': instrument_id,
-                'backtest_start_date': datetime.now().date() - pd.DateOffset(years=1),
+                'backtest_start_date': (datetime.now() - pd.DateOffset(years=1)).date(),
                 'backtest_end_date': datetime.now().date(),
                 'holding_period_days': 7,
                 'probability_threshold': 0.6,

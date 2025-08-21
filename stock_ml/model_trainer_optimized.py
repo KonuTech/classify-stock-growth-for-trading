@@ -338,16 +338,9 @@ class HighPerformanceXGBoostTrainer:
         return False
     
     def _optimize_n_jobs(self) -> int:
-        """Optimize number of parallel jobs based on system resources"""
-        if self.cpu_cores >= 16:
-            # High-end system: Leave 2 cores for system
-            return self.cpu_cores - 2
-        elif self.cpu_cores >= 8:
-            # Mid-range system: Leave 1 core for system
-            return self.cpu_cores - 1
-        else:
-            # Use all cores for smaller systems
-            return -1
+        """Use exactly 2 cores per DAG for concurrent execution"""
+        # Fixed 2 cores per DAG - simple and predictable
+        return 2
     
     def _select_tree_method(self) -> str:
         """Select optimal tree construction method based on hardware"""
@@ -538,7 +531,7 @@ class HighPerformanceXGBoostTrainer:
             param_grid=param_grid,
             cv=cv,
             scoring=scoring,
-            n_jobs=min(4, self.cpu_cores // 2),  # Leave cores for XGBoost internal parallelization
+            n_jobs=2,  # Reduced to 2 cores per DAG for better concurrency
             verbose=2,  # More detailed progress
             return_train_score=True,
             error_score='raise'  # Better error handling

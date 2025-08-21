@@ -250,6 +250,7 @@ def create_ml_etl_job(**context) -> int:
 def train_ml_model(**context) -> Dict[str, Any]:
     """Complete ML training pipeline for this stock"""
     import time
+    from datetime import datetime, date
     
     logger = ETLLogger('ml_training').get_logger()
     start_time = time.time()
@@ -414,7 +415,27 @@ def train_ml_model(**context) -> Dict[str, Any]:
             logger.info(f"✅ Backtesting completed - Total Return: {bt_result.get('total_return', 0):.2%}, Win Rate: {bt_result.get('win_rate', 0):.1%}")
         else:
             logger.warning(f"⚠️ Backtesting failed for {stock_symbol}")
-            backtest_results = {stock_symbol: {'error': 'Backtesting failed'}}
+            # Create default backtest results with required fields when backtesting fails
+            backtest_results = {stock_symbol: {
+                'error': 'Backtesting failed - no trades executed',
+                'total_return': 0.0,
+                'annualized_return': 0.0,
+                'sharpe_ratio': 0.0,
+                'win_rate': 0.0,
+                'total_trades': 0,
+                'winning_trades': 0,
+                'losing_trades': 0,
+                'max_drawdown': 0.0,
+                'volatility': 0.0,
+                'profit_factor': 1.0,
+                'avg_trade_return': 0.0,
+                'best_trade_return': 0.0,
+                'worst_trade_return': 0.0,
+                'var_95': 0.0,
+                'calmar_ratio': 0.0,
+                'trades': [],
+                'monthly_returns': {}
+            }}
         
         # Step 7: Database Storage
         logger.info(f"💾 Step 7: Storing ML results in database for {stock_symbol}")
@@ -479,12 +500,27 @@ def train_ml_model(**context) -> Dict[str, Any]:
             )
             
             # Store predictions for future analysis
+            # Rejoin trading_date_local from original engineered_data using test_data index
+            if 'trading_date_local' in test_data.columns:
+                # trading_date_local is still available
+                test_dates = [pd.to_datetime(td).date() for td in test_data['trading_date_local']]
+            else:
+                # trading_date_local was dropped during preprocessing - rejoin from engineered_data
+                test_dates_series = engineered_data.loc[test_data.index, 'trading_date_local']
+                test_dates = [pd.to_datetime(td).date() for td in test_dates_series]
+            
+            logger.info(f"✅ Extracted {len(test_dates)} actual trading dates for {stock_symbol} predictions")
+            
+            # Validate alignment
+            if len(test_dates) != len(test_predictions):
+                raise ValueError(f"Date/prediction mismatch for {stock_symbol}: {len(test_dates)} dates vs {len(test_predictions)} predictions")
+            
             prediction_id = ml_db_ops.save_predictions(
                 model_id=model_id,
                 instrument_id=instrument_id,
                 predictions=test_predictions.tolist() if hasattr(test_predictions, 'tolist') else list(test_predictions),
                 probabilities=test_probabilities.tolist() if hasattr(test_probabilities, 'tolist') else list(test_probabilities),
-                test_dates=[pd.to_datetime(d).date() if not isinstance(d, (datetime, date)) else (d.date() if hasattr(d, 'date') else d) for d in test_data.index] if hasattr(test_data, 'index') else [datetime.now().date() for _ in range(len(test_predictions))],
+                test_dates=test_dates,
                 symbol=stock_symbol,
                 airflow_context={
                     'dag_id': training_config['dag_id'],

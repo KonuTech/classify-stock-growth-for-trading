@@ -178,7 +178,7 @@ class XGBoostPreprocessor:
             learning_rate=0.1,
             random_state=self.random_state,
             scale_pos_weight=scale_pos_weight,
-            n_jobs=-1,
+            n_jobs=2,  # Limited cores for concurrent DAG execution
             verbosity=0
         )
         

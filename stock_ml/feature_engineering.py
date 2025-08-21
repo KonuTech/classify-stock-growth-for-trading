@@ -190,8 +190,8 @@ class StockFeatureEngineer:
         # Binary target: 1 if positive growth, 0 otherwise
         df['target'] = (df[f'growth_future_{target_days}d'] > 1).astype(int)
         
-        # Remove last N rows (no future data available)
-        df = df.iloc[:-target_days].copy()
+        # Keep all rows - we want to predict future growth for recent dates
+        # NaN values in target/growth_future_7d for recent dates are expected and handled in train/test split
         
         target_distribution = df['target'].value_counts(normalize=True)
         logger.info(f"Target distribution ({target_days}-day growth) - Positive: {target_distribution.get(1, 0):.2%}, Negative: {target_distribution.get(0, 0):.2%}")

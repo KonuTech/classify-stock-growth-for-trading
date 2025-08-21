@@ -77,3 +77,6 @@ Best parameters: {'colsample_bytree': 1.0, 'learning_rate': 0.15, 'max_depth': 8
   ⎿  ☐ Check schema template for ML tables and update README.md accordingly
   ⎿  5-hour limit reached ∙ resets 3am
      /upgrade to increase your usage limit.
+
+
+Pooling for CPUs in Airflow

@@ -257,19 +257,36 @@ class MLSchemaValidator:
             
             # Dates should be date objects or convertible to dates
             for i, test_date in enumerate(test_dates):
+                current_date = test_date
+                
                 if not isinstance(test_date, (date, datetime)):
                     # Try to convert if it's a timestamp or string
                     try:
                         if isinstance(test_date, (int, float)):
                             # Assume it's a timestamp
-                            converted_date = pd.to_datetime(test_date, unit='s').date()
+                            current_date = pd.to_datetime(test_date, unit='s').date()
                         elif isinstance(test_date, str):
                             # Try to parse as date string
-                            converted_date = pd.to_datetime(test_date).date()
+                            current_date = pd.to_datetime(test_date).date()
                         else:
                             errors.append(f"Date at index {i} cannot be converted to date: {type(test_date)}")
+                            continue
                     except Exception:
                         errors.append(f"Date at index {i} conversion failed: {type(test_date)}")
+                        continue
+                
+                # Check for Unix epoch (1970-01-01) which indicates a timestamp conversion error
+                if isinstance(current_date, date) and current_date.year == 1970:
+                    errors.append(f"Date at index {i} is Unix epoch (1970-01-01) - likely timestamp conversion error")
+                
+                # Validate date is reasonable (not too far in past/future)
+                if isinstance(current_date, date):
+                    today = datetime.now().date()
+                    min_date = date(2000, 1, 1)  # Reasonable minimum for stock data
+                    max_date = date(today.year + 1, 12, 31)  # Up to next year
+                    
+                    if current_date < min_date or current_date > max_date:
+                        errors.append(f"Date at index {i} is out of reasonable range: {current_date}")
         
         except Exception as e:
             errors.append(f"Data type validation failed: {str(e)}")
