@@ -70,7 +70,7 @@ ENVIRONMENTS = {
     'test': {
         'schema': 'test_stock_data', 
         'description': 'Test stock data ETL pipeline',
-        'schedule': '0 18 * * 1-5',  # Manual triggering for testing
+        'schedule': None,  # Manual triggering for testing
         'tags': ['stock-data', 'etl', 'testing'],
         'retries': 1,
         'catchup': False

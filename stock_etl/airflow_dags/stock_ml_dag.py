@@ -1,15 +1,17 @@
 """
-Stock ML Pipeline DAGs - Dynamic Per-Stock Training
-==================================================
+Stock ML Pipeline DAGs - Multi-Environment Dynamic Training
+============================================================
 
-Dynamic DAG generation for ML training pipeline:
-- Creates individual DAGs for each stock symbol
-- 7-day growth prediction models using XGBoost  
-- Stores all results in test_stock_data schema ML tables
+Dynamic multi-environment DAG generation for ML training pipeline:
+- Creates individual DAGs for each stock symbol per environment (dev/test/prod)
+- 7-day growth prediction models using XGBoost
+- Environment-specific scheduling and storage
 - Web application ready with complete ML artifacts
 
-Schedule: Daily at 6 PM (after market close, Monday-Friday)
-Storage: test_stock_data schema ML tables for web application
+Environments:
+- dev: Manual triggering, dev_stock_data schema
+- test: Manual triggering, test_stock_data schema  
+- prod: Daily at 6 PM (after market close), prod_stock_data schema
 """
 
 from datetime import datetime, timedelta
@@ -38,61 +40,101 @@ for path in airflow_paths:
         sys.path.insert(0, path)
 
 
-def get_active_stock_symbols():
+# Environment configurations for ML DAGs (dev disabled, only test and prod)
+ML_ENVIRONMENTS = {
+    'test': {
+        'schema': 'test_stock_data',
+        'schedule': None,                # Manual triggering  
+        'retries': 1,
+        'catchup': False,
+        'description_suffix': 'Test ML training'
+    },
+    'prod': {
+        'schema': 'prod_stock_data',
+        'schedule': '0 18 * * 1-5',      # 6 PM weekdays
+        'retries': 2,
+        'catchup': True,
+        'description_suffix': 'Production ML training'
+    }
+}
+
+
+def get_active_stock_symbols_for_environment(env: str):
     """
-    Get active stock symbols from test_stock_data for dynamic DAG generation
+    Get active stock symbols from the specified environment schema for dynamic DAG generation
     
+    Args:
+        env: Environment name ('dev', 'test', 'prod')
+        
     Returns:
         Dict of stock configurations for DAG generation
     """
-    print("🔍 Querying test_stock_data for active stock symbols...")
+    if env not in ML_ENVIRONMENTS:
+        raise ValueError(f"Unknown environment: {env}. Must be one of {list(ML_ENVIRONMENTS.keys())}")
+    
+    env_config = ML_ENVIRONMENTS[env]
+    schema = env_config['schema']
+    
+    print(f"🔍 Querying {schema} for active stock symbols...")
     
     # Use the same PostgresHook as the stock ETL DAG
     postgres_hook = PostgresHook(postgres_conn_id='postgres_default')
     
-    with postgres_hook.get_conn() as conn:
-        with conn.cursor() as cursor:
-            # Use the simple query you provided
-            cursor.execute('''
-                SELECT DISTINCT symbol FROM test_stock_data.base_instruments
-                WHERE instrument_type='stock'
-                ORDER BY symbol
-            ''')
-            
-            symbols = [row[0] for row in cursor.fetchall()]
-            print(f"📊 Found {len(symbols)} stock symbols: {', '.join(symbols)}")
-            
-            if not symbols:
-                raise ValueError("No stock symbols found in test_stock_data.base_instruments")
-            
-            stocks = {}
-            for symbol in symbols:
-                stocks[symbol.lower()] = {
-                    'symbol': symbol,
-                    'name': f'{symbol} Stock',  # Generic name, will be resolved at runtime
-                    'instrument_id': None,  # Will be resolved at runtime
-                    'price_records': 1000,  # Placeholder, actual count not needed for DAG generation
-                    'description': f'ML training pipeline for {symbol}',
-                    'schedule': '0 18 * * 1-5',  # 6 PM weekdays
-                    'tags': ['ml_pipeline', 'stock_training', '7day_targets', symbol.lower()],
-                    'retries': 2,
-                    'catchup': False
-                }
-            
-            print(f"✅ Generated configurations for {len(stocks)} stocks")
-            return stocks
+    try:
+        with postgres_hook.get_conn() as conn:
+            with conn.cursor() as cursor:
+                # Query the environment-specific schema
+                cursor.execute(f'''
+                    SELECT DISTINCT symbol FROM {schema}.base_instruments
+                    WHERE instrument_type='stock'
+                    ORDER BY symbol
+                ''')
+                
+                symbols = [row[0] for row in cursor.fetchall()]
+                print(f"📊 Found {len(symbols)} stock symbols in {schema}: {', '.join(symbols)}")
+                
+                if not symbols:
+                    print(f"⚠️ No stock symbols found in {schema}.base_instruments - will create empty DAG set")
+                    return {}
+                
+                stocks = {}
+                for symbol in symbols:
+                    # Use environment prefix for all environments (test_symbol, prod_symbol)
+                    stock_key = f"{env}_{symbol.lower()}"
+                    
+                    stocks[stock_key] = {
+                        'symbol': symbol,
+                        'environment': env,
+                        'schema': schema,
+                        'name': f'{symbol} Stock ({env.upper()})',
+                        'instrument_id': None,  # Will be resolved at runtime
+                        'price_records': 1000,  # Placeholder, actual count not needed for DAG generation
+                        'description': f'ML training pipeline for {symbol} - {env_config["description_suffix"]}',
+                        'schedule': env_config['schedule'],
+                        'tags': ['ml_pipeline', 'stock_training', '7day_targets', f'{env}_environment', symbol.lower()],
+                        'retries': env_config['retries'],
+                        'catchup': env_config['catchup']
+                    }
+                
+                print(f"✅ Generated configurations for {len(stocks)} stocks in {env} environment")
+                return stocks
+                
+    except Exception as e:
+        print(f"❌ Failed to query {schema} for stock symbols: {e}")
+        print(f"   This may be expected if {schema} schema doesn't exist yet")
+        return {}
 
 
 def create_ml_dag(stock_key: str, stock_config: Dict[str, Any]) -> DAG:
     """
-    Create an ML training DAG for a specific stock symbol
+    Create an ML training DAG for a specific stock symbol and environment
     
     Args:
-        stock_key: Lowercase stock symbol key (e.g., 'xtb', 'cdr')
-        stock_config: Stock configuration dictionary
+        stock_key: Stock symbol key with environment (e.g., 'xtb_dev', 'cdr_prod')
+        stock_config: Stock configuration dictionary with environment info
         
     Returns:
-        Airflow DAG for the specific stock
+        Airflow DAG for the specific stock and environment
     """
     
     # DAG Configuration
@@ -107,9 +149,13 @@ def create_ml_dag(stock_key: str, stock_config: Dict[str, Any]) -> DAG:
         'catchup': stock_config['catchup']
     }
     
-    # Create stock-specific DAG with symbol suffix
+    # Create environment-specific DAG ID with proper prefix
+    environment = stock_config['environment']
+    symbol = stock_config['symbol'].lower()
+    dag_id = f'{environment}_ml_pipeline_{symbol}'  # e.g., test_ml_pipeline_xtb, prod_ml_pipeline_cdr
+    
     dag = DAG(
-        f'ml_pipeline_{stock_key}',  # e.g., ml_pipeline_xtb, ml_pipeline_cdr
+        dag_id,
         default_args=default_args,
         description=stock_config['description'],
         schedule=stock_config['schedule'],
@@ -118,37 +164,42 @@ def create_ml_dag(stock_key: str, stock_config: Dict[str, Any]) -> DAG:
         params={
             'stock_symbol': stock_config['symbol'],
             'stock_name': stock_config['name'],
+            'environment': stock_config['environment'],
             'instrument_id': stock_config.get('instrument_id'),
-            'target_schema': 'test_stock_data',
+            'target_schema': stock_config['schema'],
             'target_days': 7,  # 7-day growth targets
-            'model_version_prefix': 'v2.1',
+            'model_version_prefix': f'v2.1_{stock_config["environment"]}',
             'web_application_ready': True,
-            'grid_search_type': 'quick',  # Use quick for daily runs
+            'grid_search_type': 'quick',  # Use quick grid search for all environments during testing
             'stock_key': stock_key  # For identification
         }
     )
     
     # Task definitions using PythonOperator (following stock_etl_dag.py pattern)
+    # Use environment-agnostic task IDs to avoid conflicts
+    symbol = stock_config['symbol'].lower()
+    env = stock_config['environment']
+    
     initialize_task = PythonOperator(
-        task_id=f'initialize_ml_training_{stock_key}',
+        task_id=f'initialize_ml_training_{symbol}_{env}',
         python_callable=initialize_ml_training,
         dag=dag
     )
 
     create_etl_job_task = PythonOperator(
-        task_id=f'create_etl_job_{stock_key}',
+        task_id=f'create_etl_job_{symbol}_{env}',
         python_callable=create_ml_etl_job,
         dag=dag
     )
 
     train_model_task = PythonOperator(
-        task_id=f'train_ml_model_{stock_key}',
+        task_id=f'train_ml_model_{symbol}_{env}',
         python_callable=train_ml_model,
         dag=dag
     )
 
     finalize_task = PythonOperator(
-        task_id=f'finalize_training_{stock_key}',
+        task_id=f'finalize_training_{symbol}_{env}',
         python_callable=finalize_ml_training,
         dag=dag
     )
@@ -161,12 +212,14 @@ def create_ml_dag(stock_key: str, stock_config: Dict[str, Any]) -> DAG:
 
 # Task function definitions (following stock_etl_dag.py pattern)
 def initialize_ml_training(**context) -> Dict[str, Any]:
-    """Initialize ML training for this specific stock"""
+    """Initialize ML training for this specific stock and environment"""
     from datetime import datetime
     
     logger = ETLLogger('ml_initialization').get_logger()
     
     stock_symbol = context['params']['stock_symbol']
+    environment = context['params']['environment']
+    target_schema = context['params']['target_schema']
     
     # Ensure all values are JSON serializable
     training_config = {
@@ -174,18 +227,21 @@ def initialize_ml_training(**context) -> Dict[str, Any]:
         'run_id': str(context['run_id']),
         'stock_symbol': str(stock_symbol),
         'stock_name': str(context['params']['stock_name']),
+        'environment': str(environment),
         'instrument_id': context['params'].get('instrument_id'),  # Can be None
-        'target_schema': str(context['params']['target_schema']),
+        'target_schema': str(target_schema),
         'target_days': int(context['params']['target_days']),
         'model_version_prefix': str(context['params']['model_version_prefix']),
+        'grid_search_type': str(context['params']['grid_search_type']),
         'run_date': datetime.now().strftime('%Y-%m-%d'),
         'run_timestamp': datetime.now().isoformat()
     }
     
-    logger.info(f"🚀 Initializing ML training for {stock_symbol}")
-    logger.info(f"   Target schema: {training_config['target_schema']}")
+    logger.info(f"🚀 Initializing ML training for {stock_symbol} ({environment} environment)")
+    logger.info(f"   Target schema: {target_schema}")
     logger.info(f"   Target days: {training_config['target_days']}")
     logger.info(f"   Model version: {training_config['model_version_prefix']}")
+    logger.info(f"   Grid search: {training_config['grid_search_type']}")
     
     return training_config
 
@@ -196,9 +252,14 @@ def create_ml_etl_job(**context) -> int:
     
     logger = ETLLogger('ml_job_creation').get_logger()
     
-    # Get training config from previous task
-    training_config = context['task_instance'].xcom_pull(task_ids=context['task'].task_id.replace('create_etl_job_', 'initialize_ml_training_'))
+    # Get training config from previous task - handle dynamic task IDs
+    task_id_parts = context['task'].task_id.split('_')
+    symbol = task_id_parts[-2]  # second to last part
+    env = task_id_parts[-1]    # last part
+    
+    training_config = context['task_instance'].xcom_pull(task_ids=f'initialize_ml_training_{symbol}_{env}')
     stock_symbol = training_config['stock_symbol']
+    environment = training_config['environment']
     target_schema = training_config['target_schema']
     
     try:
@@ -218,7 +279,7 @@ def create_ml_etl_job(**context) -> int:
                 
                 started_at = datetime.now()
                 cursor.execute(insert_sql, (
-                    f"ML_Training_{stock_symbol}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                    f"ML_Training_{stock_symbol}_{environment}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
                     'ml_training_single_stock',
                     'stock',
                     'running',
@@ -229,8 +290,11 @@ def create_ml_etl_job(**context) -> int:
                     json.dumps({
                         'stock_symbol': stock_symbol,
                         'stock_name': training_config['stock_name'],
+                        'environment': environment,
+                        'target_schema': target_schema,
                         'target_days': training_config['target_days'],
                         'model_version_prefix': training_config['model_version_prefix'],
+                        'grid_search_type': training_config['grid_search_type'],
                         'pipeline_type': 'single_stock_ml_training',
                         'web_application_ready': True
                     })
@@ -239,33 +303,40 @@ def create_ml_etl_job(**context) -> int:
                 job_id = cursor.fetchone()[0]
                 conn.commit()
                 
-                logger.info(f"✅ Created ETL job {job_id} for {stock_symbol} ML training")
+                logger.info(f"✅ Created ETL job {job_id} for {stock_symbol} ML training ({environment} environment)")
                 return job_id
                 
     except Exception as e:
-        logger.error(f"❌ Failed to create ETL job for {stock_symbol}: {e}")
+        logger.error(f"❌ Failed to create ETL job for {stock_symbol} ({environment}): {e}")
         raise
 
 
 def train_ml_model(**context) -> Dict[str, Any]:
-    """Complete ML training pipeline for this stock"""
+    """Complete ML training pipeline for this stock and environment"""
     import time
     from datetime import datetime, date
     
     logger = ETLLogger('ml_training').get_logger()
     start_time = time.time()
     
-    # Get context from previous tasks
-    training_config = context['task_instance'].xcom_pull(task_ids=context['task'].task_id.replace('train_ml_model_', 'initialize_ml_training_'))
-    job_id = context['task_instance'].xcom_pull(task_ids=context['task'].task_id.replace('train_ml_model_', 'create_etl_job_'))
+    # Get context from previous tasks - handle dynamic task IDs
+    task_id_parts = context['task'].task_id.split('_')
+    symbol = task_id_parts[-2]  # second to last part
+    env = task_id_parts[-1]    # last part
+    
+    training_config = context['task_instance'].xcom_pull(task_ids=f'initialize_ml_training_{symbol}_{env}')
+    job_id = context['task_instance'].xcom_pull(task_ids=f'create_etl_job_{symbol}_{env}')
     
     stock_symbol = training_config['stock_symbol']
+    environment = training_config['environment']
+    target_schema = training_config['target_schema']
     
     try:
-        logger.info(f"🚀 Starting ML training pipeline for {stock_symbol}")
+        logger.info(f"🚀 Starting ML training pipeline for {stock_symbol} ({environment} environment)")
         logger.info(f"   Job ID: {job_id}")
-        logger.info(f"   Target schema: {training_config['target_schema']}")
+        logger.info(f"   Target schema: {target_schema}")
         logger.info(f"   Target days: {training_config['target_days']}")
+        logger.info(f"   Grid search type: {training_config['grid_search_type']}")
         
         # Ensure Airflow paths are in Python path for imports
         import sys
@@ -302,11 +373,9 @@ def train_ml_model(**context) -> Dict[str, Any]:
             'password': 'postgres'
         }
         
-        ml_db_ops = MLDatabaseOperations(db_host='postgres')
-        
-        # Step 1: Data Extraction
-        logger.info(f"📊 Step 1: Data extraction for {stock_symbol}")
-        extractor = MultiStockDataExtractor(db_config=airflow_db_config)
+        # Step 1: Data Extraction  
+        logger.info(f"📊 Step 1: Data extraction for {stock_symbol} from {target_schema}")
+        extractor = MultiStockDataExtractor(db_config=airflow_db_config, schema=target_schema)
         raw_data = extractor.extract_single_stock_data(symbol=stock_symbol)
         
         if raw_data is None or raw_data.empty:
@@ -372,7 +441,7 @@ def train_ml_model(**context) -> Dict[str, Any]:
             X_val=X_val,
             y_val=y_val,
             symbol=stock_symbol,
-            grid_type='quick'  # Use quick grid search for DAG efficiency
+            grid_type=training_config['grid_search_type']  # Use environment-specific grid search
         )
         
         # Add test set evaluation manually
@@ -444,13 +513,13 @@ def train_ml_model(**context) -> Dict[str, Any]:
         model_version = f"{training_config['model_version_prefix']}.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         
         try:
-            # Get instrument_id for the symbol
+            # Get instrument_id for the symbol from the target schema
             instrument_id = None
             postgres_hook = PostgresHook(postgres_conn_id='postgres_default')
             with postgres_hook.get_conn() as conn:
                 with conn.cursor() as cursor:
                     cursor.execute(
-                        "SELECT id FROM test_stock_data.base_instruments WHERE symbol = %s AND instrument_type = 'stock'",
+                        f"SELECT id FROM {target_schema}.base_instruments WHERE symbol = %s AND instrument_type = 'stock'",
                         (stock_symbol,)
                     )
                     result = cursor.fetchone()
@@ -472,6 +541,12 @@ def train_ml_model(**context) -> Dict[str, Any]:
                 else:
                     serializable_training_results[key] = str(value)
             
+            # Configure database operations for target schema
+            ml_db_ops = MLDatabaseOperations(
+                db_host='postgres',
+                target_schema=target_schema
+            )
+            
             # Store model record with metadata and metrics
             model_id = ml_db_ops.save_model_record(
                 instrument_id=instrument_id,
@@ -486,9 +561,11 @@ def train_ml_model(**context) -> Dict[str, Any]:
                 airflow_context={
                     'dag_id': training_config['dag_id'],
                     'run_id': training_config['run_id'],
+                    'environment': environment,
+                    'target_schema': target_schema,
                     'target_days': training_config['target_days']
                 },
-                is_production=False  # Set to False to avoid unique constraint conflicts
+                is_production=(environment == 'prod')  # Only production models marked as production
             )
             
             # Store feature data (using original engineered data)
@@ -542,7 +619,7 @@ def train_ml_model(**context) -> Dict[str, Any]:
                 )
             
             database_stored = True
-            logger.info(f"✅ ML results stored successfully in test_stock_data schema")
+            logger.info(f"✅ ML results stored successfully in {target_schema} schema")
             
         except Exception as db_error:
             logger.error(f"❌ Database storage failed for {stock_symbol}: {db_error}")
@@ -569,14 +646,15 @@ def train_ml_model(**context) -> Dict[str, Any]:
             'database_stored': database_stored,
             'processing_time_ms': processing_time_ms,
             'web_ready': True,
-            'schema': 'test_stock_data'
+            'environment': environment,
+            'schema': target_schema
         }
         
-        logger.info(f"✅ ML training pipeline completed for {stock_symbol} in {processing_time_ms}ms")
+        logger.info(f"✅ ML training pipeline completed for {stock_symbol} ({environment}) in {processing_time_ms}ms")
         return results
         
     except Exception as e:
-        logger.error(f"❌ ML training failed for {stock_symbol}: {e}")
+        logger.error(f"❌ ML training failed for {stock_symbol} ({environment}): {e}")
         return {
             'symbol': stock_symbol,
             'success': False,
@@ -586,17 +664,22 @@ def train_ml_model(**context) -> Dict[str, Any]:
 
 
 def finalize_ml_training(**context) -> Dict[str, Any]:
-    """Finalize ML training for this stock"""
+    """Finalize ML training for this stock and environment"""
     from datetime import datetime
     
     logger = ETLLogger('ml_finalization').get_logger()
     
-    # Get context from previous tasks
-    training_config = context['task_instance'].xcom_pull(task_ids=context['task'].task_id.replace('finalize_training_', 'initialize_ml_training_'))
-    job_id = context['task_instance'].xcom_pull(task_ids=context['task'].task_id.replace('finalize_training_', 'create_etl_job_'))
-    training_results = context['task_instance'].xcom_pull(task_ids=context['task'].task_id.replace('finalize_training_', 'train_ml_model_'))
+    # Get context from previous tasks - handle dynamic task IDs
+    task_id_parts = context['task'].task_id.split('_')
+    symbol = task_id_parts[-2]  # second to last part
+    env = task_id_parts[-1]    # last part
+    
+    training_config = context['task_instance'].xcom_pull(task_ids=f'initialize_ml_training_{symbol}_{env}')
+    job_id = context['task_instance'].xcom_pull(task_ids=f'create_etl_job_{symbol}_{env}')
+    training_results = context['task_instance'].xcom_pull(task_ids=f'train_ml_model_{symbol}_{env}')
     
     stock_symbol = training_config['stock_symbol']
+    environment = training_config['environment']
     target_schema = training_config['target_schema']
     
     try:
@@ -628,45 +711,61 @@ def finalize_ml_training(**context) -> Dict[str, Any]:
                 # Create final summary
                 final_summary = {
                     'stock_symbol': stock_symbol,
+                    'environment': environment,
                     'job_id': job_id,
                     'dag_id': training_config['dag_id'],
                     'run_id': training_config['run_id'],
                     'status': status,
                     'success': training_results.get('success', False),
                     'web_application_ready': training_results.get('web_ready', False),
-                    'schema': 'test_stock_data',
+                    'schema': target_schema,
                     'completed_at': datetime.now().isoformat()
                 }
                 
                 if training_results.get('success', False):
-                    logger.info(f"🎉 ML training completed successfully for {stock_symbol}")
+                    logger.info(f"🎉 ML training completed successfully for {stock_symbol} ({environment} environment)")
                     logger.info(f"   Web Ready: ✅")
+                    logger.info(f"   Schema: {target_schema}")
                 else:
-                    logger.error(f"❌ ML training failed for {stock_symbol}: {training_results.get('error', 'Unknown error')}")
+                    logger.error(f"❌ ML training failed for {stock_symbol} ({environment}): {training_results.get('error', 'Unknown error')}")
                 
                 return final_summary
                 
     except Exception as e:
-        logger.error(f"❌ Failed to finalize training for {stock_symbol}: {e}")
+        logger.error(f"❌ Failed to finalize training for {stock_symbol} ({environment}): {e}")
         raise
 
 
-# Generate DAGs dynamically for all active stocks
-print("🚀 Generating dynamic ML pipeline DAGs...")
+# Generate DAGs dynamically for all active stocks in all environments
+print("🚀 Generating dynamic multi-environment ML pipeline DAGs...")
 
-# Get active stocks for DAG generation
-ACTIVE_STOCKS = get_active_stock_symbols()
+# Get active stocks for each environment
+ALL_STOCKS = {}
+for env in ML_ENVIRONMENTS.keys():
+    env_stocks = get_active_stock_symbols_for_environment(env)
+    ALL_STOCKS.update(env_stocks)
+    print(f"📊 Environment {env.upper()}: {len(env_stocks)} stocks")
 
-print(f"✅ Found {len(ACTIVE_STOCKS)} active stocks for ML DAG generation:")
-for stock_key, stock_config in ACTIVE_STOCKS.items():
-    print(f"   - {stock_config['symbol']} ({stock_config['name']}) - {stock_config['price_records']} records")
+print(f"\n✅ Total: {len(ALL_STOCKS)} stock-environment combinations for ML DAG generation:")
+for stock_key, stock_config in ALL_STOCKS.items():
+    print(f"   - {stock_config['symbol']} ({stock_config['environment']}) → {stock_config['schema']}")
 
-# Generate DAGs for all active stocks
-for stock_key, stock_config in ACTIVE_STOCKS.items():
-    dag_id = f'ml_pipeline_{stock_key}'
-    globals()[dag_id] = create_ml_dag(stock_key, stock_config)
-    print(f"✅ Generated DAG: {dag_id}")
+# Generate DAGs for all stock-environment combinations
+generated_dags = 0
+for stock_key, stock_config in ALL_STOCKS.items():
+    environment = stock_config['environment']
+    symbol = stock_config['symbol'].lower()
+    dag_id = f'{environment}_ml_pipeline_{symbol}'  # Use proper prefix format
+    try:
+        globals()[dag_id] = create_ml_dag(stock_key, stock_config)
+        print(f"✅ Generated DAG: {dag_id} → {stock_config['schema']}")
+        generated_dags += 1
+    except Exception as e:
+        print(f"❌ Failed to generate DAG {dag_id}: {e}")
 
-print(f"🎉 Successfully generated {len(ACTIVE_STOCKS)} ML pipeline DAGs")
-print("   Each DAG will train models and store results in test_stock_data schema")
+print(f"\n🎉 Successfully generated {generated_dags}/{len(ALL_STOCKS)} ML pipeline DAGs")
+print("   Environment-specific scheduling and storage:")
+for env, config in ML_ENVIRONMENTS.items():
+    schedule_desc = config['schedule'] if config['schedule'] else 'Manual'
+    print(f"     - {env.upper()}: {schedule_desc} → {config['schema']}")
 print("   All DAGs are web application ready for dashboard integration")

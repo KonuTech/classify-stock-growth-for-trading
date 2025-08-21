@@ -228,6 +228,11 @@ def get_test_database() -> DatabaseManager:
     return get_database_manager("test_stock_data")
 
 
+def get_prod_database() -> DatabaseManager:
+    """Get production database manager."""
+    return get_database_manager("prod_stock_data")
+
+
 @contextmanager
 def get_db_session(schema: str = "test_stock_data") -> Generator[Session, None, None]:
     """Convenience function to get database session."""

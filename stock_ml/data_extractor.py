@@ -22,12 +22,13 @@ logger = get_ml_logger(__name__)
 class MultiStockDataExtractor:
     """Extract stock data from PostgreSQL database for multiple instruments"""
     
-    def __init__(self, db_config: dict = None):
+    def __init__(self, db_config: dict = None, schema: str = None):
         """
         Initialize the data extractor
         
         Args:
             db_config: Database configuration dictionary
+            schema: Database schema name (required for environment-agnostic operation)
         """
         self.db_config = db_config or {
             'host': 'localhost',
@@ -36,6 +37,9 @@ class MultiStockDataExtractor:
             'user': 'postgres',
             'password': 'postgres'
         }
+        if schema is None:
+            raise ValueError("Schema parameter is required for environment-agnostic operation")
+        self.schema = schema
         self.pg_conn = None
         
     def connect(self):
@@ -63,10 +67,10 @@ class MultiStockDataExtractor:
         if not self.pg_conn:
             self.connect()
             
-        query = """
+        query = f"""
         SELECT DISTINCT bi.symbol
-        FROM test_stock_data.base_instruments AS bi
-        JOIN test_stock_data.stock_prices AS sp ON bi.id = sp.stock_id
+        FROM {self.schema}.base_instruments AS bi
+        JOIN {self.schema}.stock_prices AS sp ON bi.id = sp.stock_id
         WHERE bi.instrument_type = 'stock'
         ORDER BY bi.symbol;
         """
@@ -120,7 +124,7 @@ class MultiStockDataExtractor:
         if not self.pg_conn:
             self.connect()
             
-        query = """
+        query = f"""
         SELECT
             bi.symbol,
             bi.currency,
@@ -128,9 +132,9 @@ class MultiStockDataExtractor:
             sp.volume,
             sp.trading_date_local
         FROM
-            test_stock_data.base_instruments AS bi
+            {self.schema}.base_instruments AS bi
         JOIN
-            test_stock_data.stock_prices AS sp ON bi.id = sp.stock_id
+            {self.schema}.stock_prices AS sp ON bi.id = sp.stock_id
         WHERE
             bi.symbol = %s
         ORDER BY

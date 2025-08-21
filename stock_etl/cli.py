@@ -9,7 +9,7 @@ from datetime import datetime
 from jinja2 import Template
 import tempfile
 
-from .core.database import get_database_manager, get_dev_database, get_test_database
+from .core.database import get_database_manager, get_dev_database, get_test_database, get_prod_database
 from .core.models import InstrumentType, JobStatus
 from .data.stooq_extractor import StooqExtractor, get_polish_market_symbols
 from .database.operations import DatabaseOperations
@@ -179,6 +179,40 @@ def init_test_database():
         
     except Exception as e:
         click.echo(f"❌ Failed to initialize test database: {e}")
+        return False
+
+
+@database.command('init-prod')
+def init_prod_database():
+    """Initialize production database with ML tables (clean, no dummy data)."""
+    try:
+        click.echo("🚀 Initializing production database...")
+        
+        db_manager = get_prod_database()
+        
+        # Render schema template with production type
+        click.echo("📝 Rendering production schema template...")
+        schema_sql = render_schema_template("production", "prod_stock_data")
+        
+        # Create temporary file and execute schema
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.sql', delete=False) as temp_file:
+            temp_file.write(schema_sql)
+            temp_schema_path = temp_file.name
+        
+        try:
+            click.echo("📝 Creating production schema with ML tables...")
+            if not db_manager.execute_sql_file(temp_schema_path):
+                click.echo("❌ Failed to create production schema")
+                return False
+        finally:
+            # Clean up temporary file
+            Path(temp_schema_path).unlink(missing_ok=True)
+        
+        click.echo("✅ Production database initialized successfully with ML tables!")
+        return True
+        
+    except Exception as e:
+        click.echo(f"❌ Failed to initialize production database: {e}")
         return False
 
 

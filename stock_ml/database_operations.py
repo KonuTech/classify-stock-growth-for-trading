@@ -16,14 +16,14 @@ import logging
 import numpy as np
 import pandas as pd
 from sqlalchemy import text
-from stock_etl.core.database import get_test_database
+from stock_etl.core.database import get_dev_database, get_test_database, get_prod_database
 from .schema_validator import create_validator
 
 
 class MLDatabaseOperations:
     """Database operations for ML pipeline artifacts"""
     
-    def __init__(self, db_host: str = None):
+    def __init__(self, db_host: str = None, target_schema: str = None):
         self.logger = logging.getLogger(__name__)
         
         # Use provided host or detect environment
@@ -32,10 +32,25 @@ class MLDatabaseOperations:
             import os
             os.environ['DB_HOST'] = db_host
         
-        self.db = get_test_database()
+        # Set the target schema for operations (dev/test/prod)
+        self.target_schema = target_schema or "test_stock_data"
         
-        # Initialize schema validator for data validation
-        self.validator = create_validator(schema="test_stock_data", db_host=db_host)
+        # Validate schema parameter and get appropriate database connection
+        schema_to_db_function = {
+            "dev_stock_data": get_dev_database,
+            "test_stock_data": get_test_database, 
+            "prod_stock_data": get_prod_database
+        }
+        
+        if self.target_schema not in schema_to_db_function:
+            valid_schemas = list(schema_to_db_function.keys())
+            raise ValueError(f"Invalid target_schema '{self.target_schema}'. Must be one of: {valid_schemas}")
+        
+        # Get the appropriate database connection based on target schema
+        self.db = schema_to_db_function[self.target_schema]()
+        
+        # Initialize schema validator for data validation with correct schema
+        self.validator = create_validator(schema=self.target_schema, db_host=db_host)
     
     def save_model_record(
         self, 

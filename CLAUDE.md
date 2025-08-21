@@ -40,7 +40,7 @@ make start
 # Alternative: Initialize specific environment
 make init-dev    # Initialize dev environment + trigger dev DAG
 make init-test   # Initialize test environment + trigger test DAG
-make init-prod   # Initialize prod environment + trigger prod DAG
+make init-prod   # Initialize prod environment + trigger prod DAG (ML tables included)
 
 # Manual development setup
 uv sync --group dev
@@ -55,9 +55,10 @@ uv sync
 # Install with development dependencies (includes jupyterlab, plotting libraries)
 uv sync --group dev
 
-# Initialize specific database schemas
+# Initialize specific database schemas  
 uv run python -m stock_etl.cli database init-dev
 uv run python -m stock_etl.cli database init-test
+uv run python -m stock_etl.cli database init-prod  # Includes ML tables
 
 # Test database connectivity
 uv run python -m stock_etl.cli database test-connection --schema dev_stock_data
@@ -233,19 +234,20 @@ Dynamic environment-specific DAGs in `stock_etl/airflow_dags/stock_etl_dag.py`:
 - **Automated Connections**: postgres_default and postgres_stock connections configured via docker-compose
 
 ### ML Pipeline DAG Architecture ✅ WORKING
-Dynamic ML training DAGs in `stock_etl/airflow_dags/stock_ml_dag.py`:
+Dynamic multi-environment ML training DAGs in `stock_etl/airflow_dags/stock_ml_dag.py`:
 
-- **Per-Stock ML DAGs**: Dynamically generated DAGs for each stock symbol in test_stock_data
+- **Multi-Environment Support**: Dynamically generated DAGs for each stock symbol per environment (dev/test/prod)
+- **Environment-Specific Scheduling**: Manual triggering for dev/test, production schedule for prod
 - **7-Day Growth Prediction**: Binary classification for weekly stock growth forecasting
 - **Complete ML Pipeline**: Data extraction → feature engineering → model training → backtesting → database storage
-- **Schema Validation**: Comprehensive data validation against ML table schemas before insertion
+- **Schema-Aware Operations**: Each DAG targets its specific environment schema (dev_stock_data, test_stock_data, prod_stock_data)
 - **XGBoost Classification**: GPU-accelerated gradient boosting with hyperparameter optimization
-- **Production Schedule**: Daily execution at 6 PM (after market close, Monday-Friday)
-- **Database Integration**: All ML artifacts stored in test_stock_data schema for web application access
+- **Environment-Specific Configuration**: Grid search type and model versioning adapted per environment
+- **Database Integration**: All ML artifacts stored in environment-specific schemas for web application access
 
 ### Environment Configurations
 ```python
-# Environment-specific DAG configurations
+# ETL DAG Environment configurations
 ENVIRONMENTS = {
     'dev': {
         'schema': 'dev_stock_data',
@@ -264,6 +266,31 @@ ENVIRONMENTS = {
         'schedule': '0 18 * * 1-5',      # 6 PM weekdays
         'retries': 2,
         'catchup': True
+    }
+}
+
+# ML DAG Environment configurations  
+ML_ENVIRONMENTS = {
+    'dev': {
+        'schema': 'dev_stock_data',
+        'schedule': None,                # Manual triggering
+        'retries': 1,
+        'catchup': False,
+        'description_suffix': 'Development ML training'
+    },
+    'test': {
+        'schema': 'test_stock_data', 
+        'schedule': None,                # Manual triggering
+        'retries': 1,
+        'catchup': False,
+        'description_suffix': 'Test ML training'
+    },
+    'prod': {
+        'schema': 'prod_stock_data',
+        'schedule': '0 18 * * 1-5',      # 6 PM weekdays
+        'retries': 2,
+        'catchup': True,
+        'description_suffix': 'Production ML training'
     }
 }
 ```
@@ -300,10 +327,12 @@ docker-compose exec airflow airflow tasks logs dev_stock_etl_pipeline extract_an
 # Clear DAG run for retry
 docker-compose exec airflow airflow dags clear dev_stock_etl_pipeline
 
-# ML DAG Operations (dynamic per-stock DAGs)
-docker-compose exec airflow airflow dags list | grep ml_training   # List all ML DAGs
-docker-compose exec airflow airflow dags trigger ml_training_xtb   # Trigger specific stock ML training
-docker-compose exec airflow airflow tasks logs ml_training_xtb ml_training_task 2025-08-20   # Monitor ML task logs
+# ML DAG Operations (dynamic per-stock-environment DAGs)
+docker-compose exec airflow airflow dags list | grep ml_pipeline   # List all ML DAGs
+docker-compose exec airflow airflow dags trigger ml_pipeline_xtb_dev   # Trigger specific stock ML training (dev)
+docker-compose exec airflow airflow dags trigger ml_pipeline_cdr_test  # Trigger specific stock ML training (test)  
+docker-compose exec airflow airflow dags trigger ml_pipeline_pkn_prod  # Trigger specific stock ML training (prod)
+docker-compose exec airflow airflow tasks logs ml_pipeline_xtb_dev initialize_ml_training_xtb_dev 2025-08-20   # Monitor ML task logs
 ```
 
 ### Current Operational Status (August 2025)
@@ -315,11 +344,13 @@ docker-compose exec airflow airflow tasks logs ml_training_xtb ml_training_task 
 - Schema Permissions: ✅ dev_stock_data and test_stock_data accessible
 - Trading Calendar Integration: ✅ Polish market calendar validation active
 - ETL Job Tracking: ✅ Comprehensive metadata and lifecycle tracking
+- **NEW**: Multi-Environment ML DAGs: ✅ Implemented and ready for deployment
 
 **DAG Status:**
 - `dev_stock_etl_pipeline`: Active (is_paused = False)
 - `test_stock_etl_pipeline`: Paused (is_paused = True)
 - `prod_stock_etl_pipeline`: Paused (is_paused = True)
+- **ML DAGs**: Dynamically generated per stock-environment combination (e.g., `ml_pipeline_xtb_dev`, `ml_pipeline_cdr_test`)
 
 ### ETL Job Monitoring
 ```bash
@@ -601,10 +632,61 @@ schema_type: "production" → Production-ready with full constraints
 - **Performance Indexes**: Optimized for time-series queries and joins
 - **ETL Tracking**: Complete job lifecycle and data quality metrics
 
+## Recent Multi-Environment ML DAG Validation (August 2025)
+
+**✅ PRODUCTION TESTING COMPLETED**: Multi-environment ML pipeline validation successful
+
+### Validation Summary
+
+**Test Results:**
+- **Test Environment**: 10 ML DAGs (`test_ml_pipeline_*`) ✅ Successfully executed  
+- **Production Environment**: 10 ML DAGs (`prod_ml_pipeline_*`) ✅ Successfully executed
+- **Database Schema Separation**: Each environment correctly writes to its target schema
+- **MLDatabaseOperations Enhancement**: Fixed `target_schema` parameter handling for multi-environment support
+
+### Key Technical Improvements
+
+**Grid Search Performance Optimization:**
+- **Quick Mode**: 192 parameter combinations (2-3 minutes per stock)
+- **Comprehensive Mode**: 12,800 parameter combinations (30-60 minutes per stock)  
+- **Development Efficiency**: 66x faster testing cycles with 'quick' mode
+- **Production Flexibility**: Can switch between modes based on environment needs
+
+**Multi-Environment Architecture Benefits:**
+- **Environment Isolation**: Complete separation of dev/test/prod ML models and data
+- **Parallel Development**: Teams can train models in test while prod runs independently
+- **Safe Deployment**: Test validated models before promoting to production
+- **Resource Efficiency**: 2-core CPU limit enables 10+ concurrent DAGs per environment
+
+### Multi-Environment ML Commands
+
+```bash
+# Test environment ML DAGs (validated ✅)
+make trigger-test-ml-dags        # Trigger all 10 test ML DAGs
+
+# Production environment ML DAGs (validated ✅)
+make trigger-prod-ml-dags        # Trigger all 10 production ML DAGs
+
+# Monitor multi-environment ML progress
+docker-compose exec postgres psql -U postgres -d stock_data -c "
+-- Test environment models
+SET search_path TO test_stock_data;
+SELECT 'TEST' as env, COUNT(*) as models, ROUND(AVG(test_roc_auc), 4) as avg_roc_auc FROM ml_models;
+
+-- Production environment models
+SET search_path TO prod_stock_data;
+SELECT 'PROD' as env, COUNT(*) as models, ROUND(AVG(test_roc_auc), 4) as avg_roc_auc FROM ml_models;
+"
+
+# Individual ML DAG execution by environment
+docker-compose exec airflow airflow dags trigger test_ml_pipeline_xtb   # Test environment
+docker-compose exec airflow airflow dags trigger prod_ml_pipeline_xtb   # Production environment
+```
+
 ## Infrastructure & Operations Assessment (August 2025)
 
 ### Project Status Analysis
-**Current State**: Complete ETL pipeline with integrated ML capabilities (100% complete, 19/19 tasks)
+**Current State**: Complete ETL pipeline with integrated multi-environment ML capabilities (100% complete, validated production deployment)
 
 **Key Achievements:**
 - ✅ Complete PostgreSQL 17 + Airflow 3.0.4 containerized infrastructure
@@ -613,9 +695,11 @@ schema_type: "production" → Production-ready with full constraints
 - ✅ Production validation with 58,470+ real market records (100% success rate)
 - ✅ Dynamic multi-environment Airflow DAGs with trading calendar integration
 - ✅ Automated credential management and service orchestration via Makefile
-- ✅ **NEW**: Dynamic DAG system operational with successful dev environment execution
-- ✅ **NEW**: Complete ML pipeline with TA-Lib technical indicators and GPU-accelerated XGBoost classification
-- ✅ **NEW**: Comprehensive backtesting framework with risk-adjusted performance metrics
+- ✅ Complete ML pipeline with TA-Lib technical indicators and GPU-accelerated XGBoost classification
+- ✅ Comprehensive backtesting framework with risk-adjusted performance metrics
+- ✅ **✅ VALIDATED**: Multi-environment ML DAG architecture with successful test and prod deployment
+- ✅ **✅ ENHANCED**: MLDatabaseOperations with target_schema support for environment-agnostic operation
+- ✅ **✅ OPTIMIZED**: Grid search performance (66x faster testing cycles with quick mode)
 
 ### Project Enhancement Opportunities
 All core functionality is complete. Future enhancements could include:

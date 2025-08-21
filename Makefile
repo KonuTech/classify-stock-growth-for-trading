@@ -1,21 +1,32 @@
-.PHONY: start stop restart extract-credentials clean help init-dev init-test init-prod setup-airflow fix-schema-permissions trigger-dev-dag trigger-test-dag trigger-prod-dag
+.PHONY: start stop restart extract-credentials clean help init-dev init-test init-prod setup-airflow fix-schema-permissions trigger-dev-dag trigger-test-dag trigger-prod-dag trigger-dev-ml-dags trigger-test-ml-dags trigger-prod-ml-dags trigger-ml-stock
 
 # Default target
 help:
 	@echo "Available commands:"
-	@echo "  make start              - 🚀 COMPLETE DEPLOYMENT: services + schemas + DAGs + credentials"
+	@echo ""
+	@echo "🚀 Infrastructure:"
+	@echo "  make start              - COMPLETE DEPLOYMENT: services + schemas + DAGs + credentials"
 	@echo "  make start-services     - Start Docker services only (no schemas/credentials)"
 	@echo "  make init-dev           - Initialize dev environment + trigger dev DAG (no credentials)"
 	@echo "  make init-test          - Initialize test environment + trigger test DAG (no credentials)"  
-	@echo "  make init-prod          - Initialize prod environment + trigger prod DAG (no credentials)"
+	@echo "  make init-prod          - Initialize prod environment with ML tables (no credentials)"
 	@echo "  make extract-credentials - Extract service credentials to .env file"
 	@echo "  make setup-airflow      - Setup Airflow database connections only"
-	@echo "  make trigger-dev-dag    - Trigger development ETL DAG"
-	@echo "  make trigger-test-dag   - Trigger test ETL DAG (full_backfill mode)"
-	@echo "  make trigger-prod-dag   - Trigger production ETL DAG"
 	@echo "  make stop               - Stop all services"
 	@echo "  make restart            - Restart all services with complete setup"
 	@echo "  make clean              - Stop services and clean up completely"
+	@echo ""
+	@echo "📊 ETL DAGs:"
+	@echo "  make trigger-dev-dag    - Trigger development ETL DAG"
+	@echo "  make trigger-test-dag   - Trigger test ETL DAG (full_backfill mode)"
+	@echo "  make trigger-prod-dag   - Trigger production ETL DAG"
+	@echo ""
+	@echo "🤖 ML DAGs (Test & Production Only):"
+	@echo "  make trigger-test-ml-dags  - Trigger all test ML DAGs (test_ml_pipeline_*)"
+	@echo "  make trigger-prod-ml-dags  - Trigger all production ML DAGs (prod_ml_pipeline_*)"
+	@echo "  make trigger-ml-stock STOCK=XTB - Trigger ML training for specific stock (test & prod)"
+	@echo ""
+	@echo "❓ Help:"
 	@echo "  make help               - Show this help"
 
 # Start services with complete setup (all schemas + airflow + DAGs)
@@ -30,19 +41,19 @@ start:
 	@uv run python -m stock_etl.cli database init-dev
 	@echo "Initializing test_stock_data schema..."
 	@uv run python -m stock_etl.cli database init-test
-	@echo "Production schema setup (manual for now)..."
-	@echo "⚠️  Production schema initialization not yet implemented"
-	@echo "    Use: uv run python -m stock_etl.cli database init-prod (when available)"
+	@echo "Initializing prod_stock_data schema with ML tables..."
+	@uv run python -m stock_etl.cli database init-prod
 	@make fix-schema-permissions
 	@make setup-airflow
 	@echo "✅ All schemas initialized and permissions set!"
 	@echo "Triggering all environment DAGs..."
 	@make trigger-dev-dag
 	@make trigger-test-dag
-	@echo "⚠️  Production DAG not triggered (schema not initialized)"
+	@make trigger-prod-dag
 	@echo "✅ Complete infrastructure deployment ready!"
-	@echo "📊 Schemas: dev_stock_data ✅ test_stock_data ✅ prod_stock_data (manual)"
-	@echo "🚀 DAGs: dev_stock_etl_pipeline ✅ test_stock_etl_pipeline ✅"
+	@echo "📊 Schemas: dev_stock_data ✅ test_stock_data ✅ prod_stock_data ✅"
+	@echo "🚀 ETL DAGs: dev_stock_etl_pipeline ✅ test_stock_etl_pipeline ✅ prod_stock_etl_pipeline ✅"
+	@echo "🤖 ML DAGs: Dynamic multi-environment per-stock ML training (ready)"
 	@echo "🌐 Airflow UI: http://localhost:8080"
 	@echo "📊 pgAdmin: http://localhost:5050"
 	@echo "Waiting for Airflow to fully initialize credentials..."
@@ -185,11 +196,15 @@ init-test: start-services
 init-prod: start-services
 	@echo "Setting up production environment..."
 	@sleep 5
-	@echo "Initializing prod_stock_data schema..."
-	@echo "⚠️  Production schema initialization not yet implemented"
-	@echo "    Use: uv run python -m stock_etl.cli database init-prod (when available)"
+	@echo "Initializing prod_stock_data schema with ML tables..."
+	@uv run python -m stock_etl.cli database init-prod
+	@make fix-schema-permissions
 	@make setup-airflow
-	@echo "✅ Production environment infrastructure ready!"
+	@echo "✅ Production environment ready with complete ML pipeline support!"
+	@echo "   - ETL tables: ✅ (exchanges, base_instruments, stocks, indices, stock_prices, etl_jobs)"
+	@echo "   - ML tables: ✅ (ml_models, ml_feature_data, ml_predictions, ml_backtest_results)"
+	@echo "   - Indexes: ✅ (optimized for time-series queries and ML operations)"
+	@echo "   - Reference data: ✅ (WSE exchanges, sectors, sample instruments)"
 	@echo "🌐 Airflow UI: http://localhost:8080"
 	@echo "📊 pgAdmin: http://localhost:5050"
 	@echo "💡 Note: Run 'make extract-credentials' to get service credentials"
@@ -199,7 +214,8 @@ fix-schema-permissions:
 	@echo "Fixing database schema permissions for Airflow user..."
 	@docker-compose exec postgres psql -U postgres -d stock_data -c "GRANT USAGE ON SCHEMA dev_stock_data TO stock; GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA dev_stock_data TO stock; GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA dev_stock_data TO stock; ALTER DEFAULT PRIVILEGES IN SCHEMA dev_stock_data GRANT ALL ON TABLES TO stock; ALTER DEFAULT PRIVILEGES IN SCHEMA dev_stock_data GRANT ALL ON SEQUENCES TO stock;"
 	@docker-compose exec postgres psql -U postgres -d stock_data -c "GRANT USAGE ON SCHEMA test_stock_data TO stock; GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA test_stock_data TO stock; GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA test_stock_data TO stock; ALTER DEFAULT PRIVILEGES IN SCHEMA test_stock_data GRANT ALL ON TABLES TO stock; ALTER DEFAULT PRIVILEGES IN SCHEMA test_stock_data GRANT ALL ON SEQUENCES TO stock;"
-	@echo "✅ Schema permissions fixed for Airflow database user"
+	@docker-compose exec postgres psql -U postgres -d stock_data -c "GRANT USAGE ON SCHEMA prod_stock_data TO stock; GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA prod_stock_data TO stock; GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA prod_stock_data TO stock; ALTER DEFAULT PRIVILEGES IN SCHEMA prod_stock_data GRANT ALL ON TABLES TO stock; ALTER DEFAULT PRIVILEGES IN SCHEMA prod_stock_data GRANT ALL ON SEQUENCES TO stock;"
+	@echo "✅ Schema permissions fixed for Airflow database user (dev/test/prod)"
 
 # Setup Airflow database connections (via environment variables)
 setup-airflow:
@@ -222,9 +238,36 @@ trigger-test-dag:
 	@echo "✅ Test DAG triggered (full_backfill mode - expects 50,000+ records)"
 
 trigger-prod-dag:
-	@echo "Triggering production DAG..."
-	@docker-compose exec airflow airflow dags trigger prod_stock_etl_pipeline
-	@echo "✅ Production DAG triggered"
+	@echo "Triggering production DAG with full backfill mode..."
+	@docker-compose exec airflow airflow dags trigger prod_stock_etl_pipeline --conf '{"extraction_mode": "full_backfill"}'
+	@echo "✅ Production DAG triggered (full_backfill mode - expects 50,000+ records)"
+
+# Trigger ML DAGs for specific environments
+trigger-dev-ml-dags:
+	@echo "⚠️ Development ML DAGs are disabled (no dev environment for ML)"
+	@echo "   Use test or prod environments instead"
+
+trigger-test-ml-dags:
+	@echo "🚀 Triggering all test ML DAGs..."
+	@docker-compose exec airflow airflow dags list | grep "^test_ml_pipeline_" | awk '{print $$1}' | xargs -I {} docker-compose exec airflow airflow dags trigger {}
+	@echo "✅ All test ML DAGs triggered"
+
+trigger-prod-ml-dags:
+	@echo "🚀 Triggering all production ML DAGs..."
+	@docker-compose exec airflow airflow dags list | grep "^prod_ml_pipeline_" | awk '{print $$1}' | xargs -I {} docker-compose exec airflow airflow dags trigger {}
+	@echo "✅ All production ML DAGs triggered"
+
+# Trigger specific stock ML training across all environments
+trigger-ml-stock:
+	@if [ -z "$(STOCK)" ]; then \
+		echo "❌ Please specify STOCK parameter. Usage: make trigger-ml-stock STOCK=XTB"; \
+		exit 1; \
+	fi
+	@echo "🚀 Triggering ML training for $(STOCK) across available environments..."
+	@echo "   Note: Dev environment is disabled for ML - using test and prod only"
+	@docker-compose exec airflow airflow dags trigger test_ml_pipeline_$(shell echo $(STOCK) | tr '[:upper:]' '[:lower:]') || echo "⚠️ Test ML DAG not found for $(STOCK)"
+	@docker-compose exec airflow airflow dags trigger prod_ml_pipeline_$(shell echo $(STOCK) | tr '[:upper:]' '[:lower:]') || echo "⚠️ Prod ML DAG not found for $(STOCK)"
+	@echo "✅ ML training triggered for $(STOCK) across available environments"
 
 # Clean up everything including Docker images and containers
 clean:
