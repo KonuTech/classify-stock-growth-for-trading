@@ -162,6 +162,7 @@ uv run jupyter lab docs/stock_analysis_reports_fixed.ipynb
 ## Database Schemas
 
 ### Schema Structure
+**Core ETL Tables:**
 - **exchanges**: WSE, NewConnect, etc.
 - **base_instruments**: Common instrument data (symbol, name, type)
 - **stocks**: Stock-specific data (company_name, sector)
@@ -170,6 +171,12 @@ uv run jupyter lab docs/stock_analysis_reports_fixed.ipynb
 - **index_prices**: Daily OHLCV data for indices
 - **etl_jobs**: Job tracking and monitoring
 - **data_quality_metrics**: Automated data validation results
+
+**ML Pipeline Tables:**
+- **ml_models**: Model metadata, hyperparameters, and performance metrics
+- **ml_feature_data**: Engineered features with technical indicators and target variables
+- **ml_predictions**: Model predictions with probabilities and confidence scores
+- **ml_backtest_results**: Trading strategy performance and risk metrics
 
 ### Schema Initialization Files
 - `sql/schema_template.sql.j2`: Unified Jinja2 template for all environments
@@ -224,6 +231,17 @@ Dynamic environment-specific DAGs in `stock_etl/airflow_dags/stock_etl_dag.py`:
 - **Data Quality Validation**: Automated OHLC validation and anomaly detection
 - **Error Handling and Retry Logic**: Graceful failure handling with detailed logging
 - **Automated Connections**: postgres_default and postgres_stock connections configured via docker-compose
+
+### ML Pipeline DAG Architecture ✅ WORKING
+Dynamic ML training DAGs in `stock_etl/airflow_dags/stock_ml_dag.py`:
+
+- **Per-Stock ML DAGs**: Dynamically generated DAGs for each stock symbol in test_stock_data
+- **7-Day Growth Prediction**: Binary classification for weekly stock growth forecasting
+- **Complete ML Pipeline**: Data extraction → feature engineering → model training → backtesting → database storage
+- **Schema Validation**: Comprehensive data validation against ML table schemas before insertion
+- **XGBoost Classification**: GPU-accelerated gradient boosting with hyperparameter optimization
+- **Production Schedule**: Daily execution at 6 PM (after market close, Monday-Friday)
+- **Database Integration**: All ML artifacts stored in test_stock_data schema for web application access
 
 ### Environment Configurations
 ```python
@@ -281,6 +299,11 @@ docker-compose exec airflow airflow tasks logs dev_stock_etl_pipeline extract_an
 
 # Clear DAG run for retry
 docker-compose exec airflow airflow dags clear dev_stock_etl_pipeline
+
+# ML DAG Operations (dynamic per-stock DAGs)
+docker-compose exec airflow airflow dags list | grep ml_training   # List all ML DAGs
+docker-compose exec airflow airflow dags trigger ml_training_xtb   # Trigger specific stock ML training
+docker-compose exec airflow airflow tasks logs ml_training_xtb ml_training_task 2025-08-20   # Monitor ML task logs
 ```
 
 ### Current Operational Status (August 2025)
@@ -375,6 +398,8 @@ logger = get_ml_logger(__name__)  # Creates logs/stock_ml/{module_name}.log
 - **stock_ml.preprocessing**: Data preprocessing with feature selection (no SMOTE - inappropriate for time series)
 - **stock_ml.model_trainer_optimized**: GPU-accelerated XGBoost classification with grid search optimization
 - **stock_ml.backtesting**: Trading strategy backtesting with performance metrics
+- **stock_ml.database_operations**: Complete ML data persistence layer with CRUD operations for all ML tables
+- **stock_ml.schema_validator**: Data validation against database schema before insertion
 - **stock_ml.test_pipeline**: Comprehensive testing framework for ML pipeline validation
 - **stock_ml.logging_config**: Centralized logging utility for consistent ML module logging
 
@@ -631,6 +656,30 @@ SELECT
     ROUND(AVG(duration_seconds), 2) as avg_duration_seconds
 FROM etl_jobs 
 WHERE started_at >= CURRENT_DATE - INTERVAL '30 days';
+
+-- ML model performance monitoring
+SELECT 
+    m.model_version,
+    bi.symbol,
+    m.test_roc_auc,
+    m.test_accuracy,
+    br.total_return,
+    br.sharpe_ratio,
+    br.win_rate,
+    m.created_at
+FROM ml_models m
+JOIN base_instruments bi ON m.instrument_id = bi.id
+LEFT JOIN ml_backtest_results br ON m.id = br.model_id
+ORDER BY m.created_at DESC LIMIT 10;
+
+-- ML feature data quality check
+SELECT 
+    COUNT(*) as total_features,
+    COUNT(CASE WHEN feature_completeness > 0.95 THEN 1 END) as high_quality_features,
+    ROUND(AVG(feature_completeness), 3) as avg_completeness,
+    ROUND(AVG(data_quality_score), 3) as avg_quality_score
+FROM ml_feature_data 
+WHERE created_at >= CURRENT_DATE - INTERVAL '7 days';
 ```
 
 ### Infrastructure Readiness Assessment

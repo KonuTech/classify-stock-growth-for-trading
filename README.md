@@ -55,10 +55,18 @@ erDiagram
 ```
 
 ### Key Tables
+
+**Core ETL Tables:**
 - **Financial Data**: `stock_prices`, `index_prices` with OHLCV data
 - **Instruments**: `base_instruments` (unified ID), `stocks`, `indices` with metadata
 - **ETL Tracking**: `etl_jobs`, `etl_job_details`, `data_quality_metrics`
 - **Reference Data**: `countries`, `exchanges`, `sectors`
+
+**ML Pipeline Tables:**
+- **ML Models**: `ml_models` with model metadata, hyperparameters, and performance metrics
+- **Feature Data**: `ml_feature_data` with engineered features, technical indicators, and target variables
+- **Predictions**: `ml_predictions` with model predictions, probabilities, and confidence scores
+- **Backtesting**: `ml_backtest_results` with trading strategy performance and risk metrics
 
 ### Unified ID Design
 The system uses a **single instrument identifier** (`base_instruments.id`) across all tables, eliminating complex JOINs and improving query performance. Stock and index prices reference `base_instruments.id` directly.
@@ -365,6 +373,18 @@ The project features **dynamic environment-specific DAGs**:
 - **Data Quality Validation**: Automated OHLC validation and anomaly detection
 - **Automated Connections**: Database connections configured automatically
 
+### ML Pipeline DAG Architecture ✅
+
+**Dynamic ML Training DAGs** in `stock_etl/airflow_dags/stock_ml_dag.py`:
+
+- **Per-Stock ML DAGs**: Dynamically generated DAGs for each stock symbol in test_stock_data
+- **7-Day Growth Prediction**: Binary classification for weekly stock growth forecasting
+- **Complete ML Pipeline**: Data extraction → feature engineering → model training → backtesting → database storage
+- **Schema Validation**: Comprehensive data validation against ML table schemas before insertion
+- **XGBoost Classification**: GPU-accelerated gradient boosting with hyperparameter optimization
+- **Production Schedule**: Daily execution at 6 PM (after market close, Monday-Friday)
+- **Database Integration**: All ML artifacts stored in test_stock_data schema for web application access
+
 ### Environment Configurations
 
 ```python
@@ -407,6 +427,11 @@ docker-compose exec airflow airflow dags trigger prod_stock_etl_pipeline
 make trigger-dev-dag
 make trigger-test-dag  
 make trigger-prod-dag
+
+# ML DAG Operations (dynamic per-stock DAGs)
+docker-compose exec airflow airflow dags list | grep ml_training   # List all ML DAGs
+docker-compose exec airflow airflow dags trigger ml_training_xtb   # Trigger specific stock ML training
+docker-compose exec airflow airflow tasks logs ml_training_xtb ml_training_task 2025-08-20   # Monitor ML task logs
 ```
 
 #### 📊 Data Processing Modes
@@ -756,6 +781,8 @@ The project includes an advanced **GPU-accelerated machine learning pipeline** f
 - **📊 GPU-Optimized Preprocessing**: Native missing value handling, variance filtering, and XGBoost importance-based feature selection
 - **🚀 GPU XGBoost Model Training**: CUDA-accelerated gradient boosting with hyperparameter optimization and native NaN handling
 - **📈 Backtesting**: Trading strategy simulation with risk-adjusted performance metrics
+- **💾 Database Operations**: Complete ML data persistence layer with CRUD operations for all ML tables (`stock_ml.database_operations`)
+- **🔍 Schema Validation**: Comprehensive data validation against ML database schema before insertion (`stock_ml.schema_validator`)
 - **🧪 GPU Testing Framework**: Comprehensive pipeline validation with GPU performance benchmarking and quality thresholds
 - **🖥️ Hardware Optimization**: Automatic GPU detection, VRAM management, and performance monitoring
 
@@ -1163,12 +1190,15 @@ backoff_factor = 2           # Exponential backoff
 ✅ **Centralized ML Logging**: Context-independent logging for all ML modules  
 ✅ **GPU-Optimized Backtesting**: Risk-adjusted performance metrics with GPU acceleration monitoring  
 ✅ **High-Performance Validation**: GPU-accelerated Jupyter notebook with real-time VRAM monitoring  
+✅ **ML Database Operations**: Complete persistence layer with CRUD operations for all ML tables  
+✅ **Schema Validation**: Comprehensive data validation against ML database schema before insertion  
+✅ **Dynamic ML DAGs**: Per-stock ML training DAGs with automatic database storage  
 
-**Current Completion**: 100% (30/30 tasks completed)  
-**Latest Enhancement**: August 2025 - GPU-accelerated XGBoost with CUDA optimization and hardware auto-detection  
-**Performance Improvement**: 5-10x training speed improvement with GPU acceleration  
+**Current Completion**: 100% (32/32 tasks completed)  
+**Latest Enhancement**: August 2025 - Complete ML database integration with schema validation and dynamic DAGs  
+**Performance Improvement**: 5-10x training speed improvement with GPU acceleration + automated database storage  
 **Success Rate**: 100% (0 failures in production testing)  
-**Recent Testing**: GPU XGBoost ML pipeline validated with RTX 5080 CUDA acceleration, 20,000+ parameter combinations, and real-time performance monitoring
+**Recent Testing**: Complete ML pipeline including database operations, schema validation, and dynamic DAG execution
 
 ---
 

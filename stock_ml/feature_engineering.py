@@ -9,6 +9,7 @@ import warnings
 from typing import Dict, List, Optional, Tuple
 import logging
 from datetime import datetime
+from pathlib import Path
 from scipy.stats import chi2_contingency, f_oneway, pointbiserialr, boxcox
 from scipy import signal
 from scipy.fftpack import dct, idct
@@ -18,8 +19,141 @@ from sklearn.feature_selection import mutual_info_classif, f_classif
 warnings.filterwarnings('ignore')
 
 # Set up logging using centralized configuration
-from .logging_config import get_ml_logger
+try:
+    from .logging_config import get_ml_logger
+except ImportError:
+    from logging_config import get_ml_logger
 logger = get_ml_logger(__name__)
+
+def find_project_root() -> Path:
+    """Find project root by looking for CLAUDE.md"""
+    current_path = Path(__file__).parent
+    while current_path != current_path.parent:
+        if (current_path / 'CLAUDE.md').exists():
+            return current_path
+        current_path = current_path.parent
+    return Path(__file__).parent.parent  # Fallback
+
+def document_dataframe(df: pd.DataFrame, name: str, description: str, symbol: str = "GENERIC") -> None:
+    """Document DataFrame structure and save to markdown file"""
+    
+    if df is None or df.empty:
+        return
+        
+    try:
+        # Create documentation directory
+        project_root = find_project_root()
+        docs_dir = project_root / "docs" / "knowledge_base" / "dataframe_schemas"
+        docs_dir.mkdir(parents=True, exist_ok=True)
+        
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        shape = df.shape
+        memory_mb = df.memory_usage(deep=True).sum() / 1024 / 1024
+        
+        # Column analysis
+        columns_info = []
+        for col in df.columns:
+            dtype = str(df[col].dtype)
+            null_count = df[col].isnull().sum()
+            null_pct = (null_count / len(df)) * 100 if len(df) > 0 else 0
+            
+            # Sample values for categorical columns
+            sample_values = ""
+            if df[col].dtype == 'object' or df[col].dtype.name == 'category':
+                unique_count = df[col].nunique()
+                if unique_count <= 10:
+                    top_values = df[col].value_counts().head(3)
+                    sample_values = f" | Examples: {', '.join([f'{k}({v})' for k, v in top_values.items()])}"
+            
+            columns_info.append({
+                'column': col,
+                'dtype': dtype,
+                'null_count': null_count,
+                'null_pct': null_pct,
+                'sample_values': sample_values
+            })
+        
+        # Key numeric columns for summary
+        numeric_cols = df.select_dtypes(include=[np.number]).columns
+        key_numeric_cols = [col for col in numeric_cols if any(
+            keyword in col.lower() for keyword in ['price', 'return', 'volume', 'target', 'rsi', 'macd', 'growth']
+        )][:10]
+        
+        # Create markdown content
+        md_content = f"""# {name.title().replace('_', ' ')} DataFrame Schema
+
+**Generated**: {timestamp}  
+**Symbol**: {symbol}  
+**Pipeline Step**: Feature Engineering  
+**Description**: {description}
+
+## Overview
+
+- **Shape**: {shape[0]:,} rows × {shape[1]} columns
+- **Memory Usage**: {memory_mb:.2f} MB
+- **Total Features**: {len([c for c in df.columns if c not in ['trading_date_local', 'symbol', 'target']])}
+- **Technical Indicators**: {len([c for c in df.columns if any(x in c.lower() for x in ['rsi', 'macd', 'sma', 'ema', 'bollinger'])])}
+
+## Column Details
+
+| Column | Data Type | Null Count | Null % | Notes |
+|--------|-----------|------------|--------|-------|
+"""
+        
+        for col_info in columns_info:
+            md_content += f"| {col_info['column']} | {col_info['dtype']} | {col_info['null_count']} | {col_info['null_pct']:.1f}% | {col_info['sample_values']} |\n"
+        
+        # Add key numeric columns summary
+        if key_numeric_cols:
+            md_content += f"\n## Key Feature Statistics\n\n"
+            for col in key_numeric_cols:
+                if col in df.columns:
+                    stats = df[col].describe()
+                    md_content += f"### {col}\n"
+                    md_content += f"- **Mean**: {stats['mean']:.4f}\n"
+                    md_content += f"- **Std**: {stats['std']:.4f}\n"
+                    md_content += f"- **Min**: {stats['min']:.4f}\n"
+                    md_content += f"- **Max**: {stats['max']:.4f}\n\n"
+        
+        # Add sample data
+        md_content += "\n## Sample Data (First 3 Rows)\n\n"
+        if len(df) >= 3:
+            sample_df = df.head(3)
+            md_content += sample_df.to_markdown(index=False, floatfmt=".4f")
+        
+        # Database integration notes
+        md_content += f"\n\n## Database Integration Notes\n\n"
+        md_content += "### Key Features for Database Storage\n"
+        
+        # Categorize features
+        price_features = [c for c in df.columns if 'price' in c.lower()]
+        technical_indicators = [c for c in df.columns if any(x in c.lower() for x in ['rsi', 'macd', 'sma', 'ema', 'bollinger', 'stoch', 'williams', 'atr', 'adx'])]
+        volume_features = [c for c in df.columns if 'volume' in c.lower()]
+        growth_features = [c for c in df.columns if 'growth' in c.lower()]
+        target_features = [c for c in df.columns if 'target' in c.lower()]
+        
+        if price_features:
+            md_content += f"- **Price Features** ({len(price_features)}): {', '.join(price_features[:5])}\n"
+        if technical_indicators:
+            md_content += f"- **Technical Indicators** ({len(technical_indicators)}): {', '.join(technical_indicators[:10])}\n"
+        if volume_features:
+            md_content += f"- **Volume Features** ({len(volume_features)}): {', '.join(volume_features)}\n"
+        if growth_features:
+            md_content += f"- **Growth Features** ({len(growth_features)}): {', '.join(growth_features[:5])}\n"
+        if target_features:
+            md_content += f"- **Target Variables** ({len(target_features)}): {', '.join(target_features)}\n"
+        
+        # Save to file
+        filename = f"{name}_{symbol.lower()}.md"
+        file_path = docs_dir / filename
+        
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(md_content)
+            
+        print(f"📋 Documented {name} DataFrame: {file_path}")
+        
+    except Exception as e:
+        print(f"❌ Failed to document DataFrame {name}: {e}")
 
 # Try to import TA-Lib, provide fallback if not available
 try:
@@ -37,30 +171,30 @@ class StockFeatureEngineer:
     def __init__(self):
         self.feature_names = []
         
-    def create_target_variable(self, df: pd.DataFrame, target_days: int = 30) -> pd.DataFrame:
+    def create_target_variable(self, df: pd.DataFrame, target_days: int = 7) -> pd.DataFrame:
         """
         Create target variable for future growth prediction
         
         Args:
             df: Stock DataFrame with close_price column
-            target_days: Number of days to look ahead (default: 30)
+            target_days: Number of days to look ahead (default: 7 for weekly prediction)
             
         Returns:
             DataFrame with target variable added
         """
         df = df.copy()
         
-        # 30-day forward growth rate
-        df['growth_future_30d'] = df['close_price'].shift(-target_days) / df['close_price']
+        # 7-day forward growth rate (more predictable than 30-day)
+        df[f'growth_future_{target_days}d'] = df['close_price'].shift(-target_days) / df['close_price']
         
         # Binary target: 1 if positive growth, 0 otherwise
-        df['target'] = (df['growth_future_30d'] > 1).astype(int)
+        df['target'] = (df[f'growth_future_{target_days}d'] > 1).astype(int)
         
         # Remove last N rows (no future data available)
         df = df.iloc[:-target_days].copy()
         
         target_distribution = df['target'].value_counts(normalize=True)
-        logger.info(f"Target distribution - Positive: {target_distribution.get(1, 0):.2%}, Negative: {target_distribution.get(0, 0):.2%}")
+        logger.info(f"Target distribution ({target_days}-day growth) - Positive: {target_distribution.get(1, 0):.2%}, Negative: {target_distribution.get(0, 0):.2%}")
         
         return df
         
@@ -1441,10 +1575,18 @@ class StockFeatureEngineer:
         
         features_created = len([col for col in df_clean.columns if col not in 
                               ['symbol', 'currency', 'trading_date_local', 'close_price', 'volume',
-                               'open_price', 'high_price', 'low_price', 'target', 'growth_future_30d']])
+                               'open_price', 'high_price', 'low_price', 'target', 'growth_future_7d']])
         
         logger.info(f"{symbol}: Created {features_created} features. "
                    f"Data: {original_len} -> {len(df_clean)} records after cleaning")
+        
+        # Document the engineered features DataFrame
+        document_dataframe(
+            df_clean,
+            f"step02_feature_engineering_output",
+            f"STEP 2 - FEATURE ENGINEERING: Complete feature engineering output with {features_created} engineered features including technical indicators (RSI, MACD, Bollinger), price patterns, volume features, and binary target variable for 7-day growth prediction (more accurate than 30-day). This DataFrame feeds into the ML preprocessing step.",
+            symbol
+        )
         
         return df_clean
         
@@ -1487,7 +1629,7 @@ class StockFeatureEngineer:
             
         # Exclude non-feature columns
         exclude_cols = ['symbol', 'currency', 'trading_date_local', 'close_price', 'volume',
-                       'open_price', 'high_price', 'low_price', 'target', 'growth_future_30d']
+                       'open_price', 'high_price', 'low_price', 'target', 'growth_future_7d']
         
         feature_cols = [col for col in df.columns if col not in exclude_cols]
         

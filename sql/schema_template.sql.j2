@@ -26,6 +26,10 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'severity_level' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = '{{ schema_name }}')) THEN
         CREATE TYPE {{ schema_name }}.severity_level AS ENUM ('info', 'warning', 'error', 'critical');
     END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ml_model_status' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = '{{ schema_name }}')) THEN
+        CREATE TYPE {{ schema_name }}.ml_model_status AS ENUM ('training', 'active', 'deprecated', 'failed', 'testing');
+    END IF;
 END $$;
 
 -- Countries table
@@ -239,6 +243,209 @@ CREATE TABLE IF NOT EXISTS data_quality_metrics (
     created_at_epoch BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)::BIGINT
 );
 
+-- ML Pipeline Tables for 7-Day Growth Prediction System
+-- ML Models table
+CREATE TABLE IF NOT EXISTS ml_models (
+    id BIGSERIAL PRIMARY KEY,
+    instrument_id INTEGER NOT NULL REFERENCES base_instruments(id),
+    model_version VARCHAR(50) NOT NULL,
+    model_type VARCHAR(50) NOT NULL DEFAULT 'xgboost_classifier',
+    model_name VARCHAR(100) NOT NULL,
+    
+    -- Model Configuration (7-Day System)
+    hyperparameters JSONB NOT NULL,
+    feature_count INTEGER NOT NULL,
+    target_variable VARCHAR(50) NOT NULL DEFAULT 'growth_7d',
+    target_horizon_days INTEGER NOT NULL DEFAULT 7,
+    
+    -- Performance Metrics  
+    cv_score DECIMAL(8,6),
+    test_accuracy DECIMAL(8,6),
+    test_roc_auc DECIMAL(8,6),
+    test_f1_score DECIMAL(8,6),
+    validation_roc_auc DECIMAL(8,6),
+    
+    -- Training Data Info
+    training_records INTEGER NOT NULL,
+    validation_records INTEGER NOT NULL,
+    test_records INTEGER NOT NULL,
+    training_start_date DATE NOT NULL,
+    training_end_date DATE NOT NULL,
+    
+    -- Model File Storage
+    model_file_path TEXT NOT NULL,
+    model_file_hash CHAR(64),
+    model_size_bytes BIGINT,
+    feature_names JSONB,
+    feature_importance JSONB,
+    
+    -- Status and Lifecycle
+    status {{ schema_name }}.ml_model_status NOT NULL DEFAULT 'training',
+    is_production BOOLEAN NOT NULL DEFAULT FALSE,
+    trained_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    deployed_at TIMESTAMP WITH TIME ZONE,
+    deprecated_at TIMESTAMP WITH TIME ZONE,
+    
+    -- Airflow Integration
+    airflow_dag_id VARCHAR(100),
+    airflow_run_id VARCHAR(100),
+    training_duration_seconds INTEGER,
+    
+    -- Metadata
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(100) NOT NULL DEFAULT 'airflow',
+    
+    -- Constraints
+    CONSTRAINT unique_instrument_version UNIQUE (instrument_id, model_version)
+);
+
+-- Feature Engineering Results Table (7-Day System)
+CREATE TABLE IF NOT EXISTS ml_feature_data (
+    id BIGSERIAL PRIMARY KEY,
+    model_id BIGINT NOT NULL REFERENCES ml_models(id),
+    instrument_id INTEGER NOT NULL REFERENCES base_instruments(id),
+    
+    -- Date Information
+    trading_date DATE NOT NULL,
+    trading_date_epoch BIGINT NOT NULL,
+    
+    -- Price Features (OHLCV)
+    open_price DECIMAL(15,6) NOT NULL,
+    high_price DECIMAL(15,6) NOT NULL,
+    low_price DECIMAL(15,6) NOT NULL,
+    close_price DECIMAL(15,6) NOT NULL,
+    volume BIGINT NOT NULL,
+    
+    -- Technical Indicators (Top 20)
+    rsi_14 DECIMAL(8,4),
+    macd_line DECIMAL(8,4),
+    macd_signal DECIMAL(8,4),
+    bollinger_upper DECIMAL(15,6),
+    bollinger_lower DECIMAL(15,6),
+    sma_20 DECIMAL(15,6),
+    sma_50 DECIMAL(15,6),
+    ema_12 DECIMAL(15,6),
+    ema_26 DECIMAL(15,6),
+    stoch_k DECIMAL(8,4),
+    stoch_d DECIMAL(8,4),
+    williams_r DECIMAL(8,4),
+    atr_14 DECIMAL(8,4),
+    adx_14 DECIMAL(8,4),
+    cci_20 DECIMAL(8,4),
+    roc_10 DECIMAL(8,4),
+    
+    -- Additional Features (JSON for remaining ~170 features)
+    additional_features JSONB,
+    
+    -- Target Variables (7-Day System) 
+    target BOOLEAN NOT NULL,
+    growth_future_7d DECIMAL(8,6),
+    
+    -- Data Quality
+    feature_completeness DECIMAL(5,4),
+    data_quality_score DECIMAL(5,4),
+    
+    -- Metadata
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Constraints
+    CONSTRAINT unique_model_instrument_date UNIQUE (model_id, instrument_id, trading_date)
+);
+
+-- Model Predictions Table (7-Day System)
+CREATE TABLE IF NOT EXISTS ml_predictions (
+    id BIGSERIAL PRIMARY KEY,
+    model_id BIGINT NOT NULL REFERENCES ml_models(id),
+    instrument_id INTEGER NOT NULL REFERENCES base_instruments(id),
+    
+    -- Prediction Date Info (7-Day System)
+    prediction_date DATE NOT NULL,
+    target_date DATE NOT NULL,
+    prediction_horizon_days INTEGER NOT NULL DEFAULT 7,
+    trading_date_epoch BIGINT NOT NULL,
+    
+    -- Prediction Results
+    predicted_class BOOLEAN NOT NULL,
+    prediction_probability DECIMAL(8,6) NOT NULL,
+    prediction_confidence DECIMAL(8,6),
+    
+    -- Feature Contributions
+    feature_importance_json JSONB,
+    
+    -- Actual Outcome (filled after 7 days)
+    actual_class BOOLEAN,
+    actual_return_7d DECIMAL(8,6),
+    actual_growth_7d DECIMAL(8,6),
+    prediction_accuracy BOOLEAN,
+    
+    -- Trading Signal (7-Day System)
+    trading_signal VARCHAR(10),
+    signal_strength DECIMAL(5,4),
+    holding_period_days INTEGER NOT NULL DEFAULT 7,
+    
+    -- Metadata
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    airflow_dag_id VARCHAR(100),
+    airflow_run_id VARCHAR(100),
+    
+    -- Constraints
+    CONSTRAINT unique_model_prediction_date UNIQUE (model_id, instrument_id, prediction_date, target_date),
+    CONSTRAINT valid_probability CHECK (prediction_probability >= 0 AND prediction_probability <= 1)
+);
+
+-- Backtesting Results Table (7-Day System)
+CREATE TABLE IF NOT EXISTS ml_backtest_results (
+    id BIGSERIAL PRIMARY KEY,
+    model_id BIGINT NOT NULL REFERENCES ml_models(id),
+    instrument_id INTEGER NOT NULL REFERENCES base_instruments(id),
+    
+    -- Backtest Configuration (7-Day System)
+    backtest_start_date DATE NOT NULL,
+    backtest_end_date DATE NOT NULL,
+    holding_period_days INTEGER NOT NULL DEFAULT 7,
+    probability_threshold DECIMAL(5,4) NOT NULL DEFAULT 0.6,
+    initial_capital DECIMAL(15,2) NOT NULL DEFAULT 10000.00,
+    transaction_cost DECIMAL(6,5) NOT NULL DEFAULT 0.001,
+    
+    -- Performance Metrics (7-Day Strategy)
+    total_return DECIMAL(8,6),
+    annualized_return DECIMAL(8,6),
+    sharpe_ratio DECIMAL(8,4),
+    max_drawdown DECIMAL(8,6),
+    win_rate DECIMAL(5,4),
+    profit_factor DECIMAL(8,4),
+    
+    -- Trading Statistics (7-Day Holdings)
+    total_trades INTEGER NOT NULL DEFAULT 0,
+    winning_trades INTEGER NOT NULL DEFAULT 0,
+    losing_trades INTEGER NOT NULL DEFAULT 0,
+    avg_trade_return DECIMAL(8,6),
+    best_trade_return DECIMAL(8,6),
+    worst_trade_return DECIMAL(8,6),
+    
+    -- Risk Metrics
+    volatility DECIMAL(8,6),
+    var_95 DECIMAL(8,6),
+    calmar_ratio DECIMAL(8,4),
+    
+    -- Trade Details (JSON) - 7-Day Trades
+    trade_history JSONB,
+    monthly_returns JSONB,
+    
+    -- Quality Assessment
+    backtest_quality VARCHAR(20),
+    quality_score DECIMAL(5,4),
+    
+    -- Metadata
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    airflow_dag_id VARCHAR(100),
+    airflow_run_id VARCHAR(100),
+    
+    -- Constraints
+    CONSTRAINT unique_model_backtest UNIQUE (model_id, instrument_id, backtest_start_date, probability_threshold)
+);
+
 {% if schema_type == 'development' %}
 -- Reference data for development
 INSERT INTO countries (name, iso_code, currency_code, timezone) VALUES 
@@ -391,4 +598,17 @@ BEGIN
     EXECUTE 'CREATE INDEX IF NOT EXISTS idx_etl_job_details_target_date ON etl_job_details(target_date)';
     EXECUTE 'CREATE INDEX IF NOT EXISTS idx_data_quality_metrics_instrument_id ON data_quality_metrics(instrument_id)';
     EXECUTE 'CREATE INDEX IF NOT EXISTS idx_data_quality_metrics_severity ON data_quality_metrics(severity)';
+    
+    -- ML Pipeline indexes (7-day prediction system)
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_ml_models_instrument_id ON ml_models(instrument_id)';
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_ml_models_status ON ml_models(status)';
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_ml_models_production ON ml_models(is_production) WHERE is_production = TRUE';
+    EXECUTE 'CREATE UNIQUE INDEX IF NOT EXISTS idx_ml_models_unique_production ON ml_models(instrument_id) WHERE is_production = TRUE';
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_ml_models_version ON ml_models(model_version)';
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_ml_feature_data_instrument_date ON ml_feature_data(instrument_id, trading_date DESC)';
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_ml_feature_data_model_id ON ml_feature_data(model_id)';
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_ml_predictions_instrument_target ON ml_predictions(instrument_id, target_date DESC)';
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_ml_predictions_model_id ON ml_predictions(model_id)';
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_ml_backtest_instrument_id ON ml_backtest_results(instrument_id)';
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_ml_backtest_model_id ON ml_backtest_results(model_id)';
 END $$;

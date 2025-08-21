@@ -21,14 +21,240 @@ from sklearn.metrics import (
     precision_recall_curve, roc_curve, accuracy_score, 
     precision_score, recall_score, f1_score
 )
-import matplotlib.pyplot as plt
-import seaborn as sns
+# Optional visualization imports (for Airflow DAG compatibility)
+try:
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    VISUALIZATION_AVAILABLE = True
+except ImportError:
+    VISUALIZATION_AVAILABLE = False
 import warnings
 
 warnings.filterwarnings('ignore')
 # Set up logging using centralized configuration
-from .logging_config import get_ml_logger
+try:
+    from .logging_config import get_ml_logger
+except ImportError:
+    from logging_config import get_ml_logger
 logger = get_ml_logger(__name__)
+
+def find_project_root() -> Path:
+    """Find project root by looking for CLAUDE.md"""
+    current_path = Path(__file__).parent
+    while current_path != current_path.parent:
+        if (current_path / 'CLAUDE.md').exists():
+            return current_path
+        current_path = current_path.parent
+    return Path(__file__).parent.parent  # Fallback
+
+def document_model_results(results: Dict[str, Any], symbol: str) -> None:
+    """Document model training results"""
+    
+    try:
+        if not results:
+            return
+            
+        # Create documentation directory
+        project_root = find_project_root()
+        docs_dir = project_root / "docs" / "knowledge_base" / "dataframe_schemas"
+        docs_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create DataFrame from results for documentation
+        model_df = pd.DataFrame([{
+            'symbol': symbol,
+            'cv_score': results.get('best_cv_score', 0),
+            'test_accuracy': results.get('test_accuracy', 0), 
+            'test_roc_auc': results.get('test_roc_auc', 0),
+            'test_f1_score': results.get('test_f1_score', 0),
+            'validation_roc_auc': results.get('validation_roc_auc', 0),
+            'best_params': str(results.get('best_params', {})),
+            'feature_count': len(results.get('feature_names', [])),
+            'training_time': results.get('training_time', 0)
+        }])
+        
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Create markdown content
+        step_name = results.get('step_name', 'MODEL TRAINING')
+        step_desc = results.get('step_description', 'XGBoost model training results with performance metrics and hyperparameters')
+        
+        md_content = f"""# {step_name} - Model Results DataFrame Schema
+
+**Generated**: {timestamp}  
+**Symbol**: {symbol}  
+**Pipeline Step**: {step_name}
+**Database Table**: ml_model_results  
+**Description**: {step_desc}
+
+## Model Performance Summary
+
+- **Cross-Validation Score**: {results.get('best_cv_score', 0):.4f}
+- **Test ROC-AUC**: {results.get('test_roc_auc', 0):.4f}
+- **Test Accuracy**: {results.get('test_accuracy', 0):.4f}
+- **Test F1-Score**: {results.get('test_f1_score', 0):.4f}
+- **Feature Count**: {len(results.get('feature_names', []))}
+- **Training Time**: {results.get('training_time', 0):.1f} seconds
+
+## Best Hyperparameters
+
+```json
+{results.get('best_params', {})}
+```
+
+## Column Details
+
+| Column | Data Type | Description |
+|--------|-----------|-------------|
+| symbol | object | Stock symbol identifier |
+| cv_score | float64 | Cross-validation score (best) |
+| test_accuracy | float64 | Accuracy on test set |
+| test_roc_auc | float64 | ROC-AUC score on test set |
+| test_f1_score | float64 | F1-score on test set |
+| validation_roc_auc | float64 | ROC-AUC score on validation set |
+| best_params | object | Best hyperparameters (JSON string) |
+| feature_count | int64 | Number of features used |
+| training_time | float64 | Training time in seconds |
+
+## Database Integration Notes
+
+### Recommended PostgreSQL Schema
+```sql
+CREATE TABLE ml_model_results (
+    id BIGSERIAL PRIMARY KEY,
+    symbol VARCHAR(10) NOT NULL,
+    cv_score DECIMAL(8,6),
+    test_accuracy DECIMAL(8,6),
+    test_roc_auc DECIMAL(8,6),
+    test_f1_score DECIMAL(8,6),
+    validation_roc_auc DECIMAL(8,6),
+    best_params JSONB,
+    feature_count INTEGER,
+    training_time DECIMAL(8,2),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+## Sample Data
+
+"""
+        
+        md_content += model_df.to_markdown(index=False, floatfmt=".4f")
+        
+        # Document feature importance if available
+        if 'feature_importance' in results and results['feature_importance']:
+            md_content += "\n\n## Feature Importance (Top 10)\n\n"
+            importance_items = list(results['feature_importance'].items())[:10]
+            md_content += "| Feature | Importance |\n"
+            md_content += "|---------|------------|\n"
+            for feat, imp in importance_items:
+                md_content += f"| {feat} | {imp:.4f} |\n"
+        
+        # Save model results documentation
+        filename = f"step05_model_training_results_{symbol.lower()}.md"
+        file_path = docs_dir / filename
+        
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(md_content)
+            
+        print(f"📋 Documented model training results: {file_path}")
+        
+    except Exception as e:
+        print(f"❌ Failed to document model results for {symbol}: {e}")
+
+def document_predictions(predictions_data: Dict[str, Any], symbol: str) -> None:
+    """Document model predictions DataFrame"""
+    
+    try:
+        if 'test_predictions' not in predictions_data:
+            return
+            
+        # Create predictions DataFrame
+        predictions_df = pd.DataFrame({
+            'predicted_class': predictions_data['test_predictions'],
+            'predicted_probability': predictions_data.get('test_probabilities', [0.5] * len(predictions_data['test_predictions'])),
+            'actual_class': predictions_data.get('y_test', []),
+            'prediction_correct': predictions_data['test_predictions'] == predictions_data.get('y_test', [])
+        })
+        
+        # Create documentation directory
+        project_root = find_project_root()
+        docs_dir = project_root / "docs" / "knowledge_base" / "dataframe_schemas"
+        docs_dir.mkdir(parents=True, exist_ok=True)
+        
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Calculate prediction statistics
+        accuracy = (predictions_df['prediction_correct'].sum() / len(predictions_df)) if len(predictions_df) > 0 else 0
+        positive_predictions = predictions_df['predicted_class'].sum()
+        positive_rate = positive_predictions / len(predictions_df) if len(predictions_df) > 0 else 0
+        
+        step_name = predictions_data.get('step_name', 'MODEL PREDICTIONS')
+        step_desc = predictions_data.get('step_description', 'Model predictions vs actual outcomes on test set')
+        
+        md_content = f"""# {step_name} - Predictions DataFrame Schema
+
+**Generated**: {timestamp}  
+**Symbol**: {symbol}  
+**Pipeline Step**: {step_name}
+**Database Table**: ml_predictions  
+**Description**: {step_desc}
+
+## Prediction Summary
+
+- **Total Predictions**: {len(predictions_df):,}
+- **Prediction Accuracy**: {accuracy:.2%}
+- **Positive Predictions**: {positive_predictions} ({positive_rate:.1%})
+- **Average Probability**: {predictions_df['predicted_probability'].mean():.4f}
+
+## Column Details
+
+| Column | Data Type | Description |
+|--------|-----------|-------------|
+| predicted_class | bool | Binary prediction (True/False for growth) |
+| predicted_probability | float64 | Prediction probability [0,1] |
+| actual_class | bool | Actual outcome (if available) |
+| prediction_correct | bool | Whether prediction was correct |
+
+## Sample Data (First 5 Rows)
+
+"""
+        
+        if len(predictions_df) >= 5:
+            md_content += predictions_df.head(5).to_markdown(index=False, floatfmt=".4f")
+        
+        md_content += """
+
+## Database Integration Notes
+
+### Recommended PostgreSQL Schema
+```sql
+CREATE TABLE ml_predictions (
+    id BIGSERIAL PRIMARY KEY,
+    symbol VARCHAR(10) NOT NULL,
+    prediction_date DATE NOT NULL,
+    predicted_class BOOLEAN NOT NULL,
+    predicted_probability DECIMAL(8,6) NOT NULL,
+    actual_class BOOLEAN,
+    prediction_correct BOOLEAN,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    CONSTRAINT valid_probability CHECK (predicted_probability >= 0 AND predicted_probability <= 1)
+);
+```
+
+"""
+        
+        # Save predictions documentation
+        filename = f"step06_model_predictions_{symbol.lower()}.md"
+        file_path = docs_dir / filename
+        
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(md_content)
+            
+        print(f"📋 Documented model predictions: {file_path}")
+        
+    except Exception as e:
+        print(f"❌ Failed to document predictions for {symbol}: {e}")
 
 
 class HighPerformanceXGBoostTrainer:
@@ -550,6 +776,22 @@ class MultiStockXGBoostTrainer:
                     'training_results': train_results,
                     'test_results': test_results
                 }
+                
+                # Document model training results
+                combined_results = {**train_results, **test_results}
+                combined_results['step_name'] = 'STEP 5 - MODEL TRAINING'
+                combined_results['step_description'] = 'XGBoost model training results with hyperparameter tuning, cross-validation scores, and test set performance metrics for 7-day growth prediction (improved accuracy over 30-day)'
+                document_model_results(combined_results, symbol)
+                
+                # Document predictions
+                predictions_data = {
+                    'test_predictions': test_predictions,
+                    'test_probabilities': test_probabilities,
+                    'y_test': data['y_test'],
+                    'step_name': 'STEP 6 - MODEL PREDICTIONS',
+                    'step_description': 'Model predictions on test set with probabilities and actual outcomes for accuracy assessment'
+                }
+                document_predictions(predictions_data, symbol)
                 
                 logger.info(f"Completed high-performance training for {symbol}")
                 

@@ -12,7 +12,10 @@ from datetime import datetime
 from pathlib import Path
 
 # Set up logging using centralized configuration
-from .logging_config import get_ml_logger
+try:
+    from .logging_config import get_ml_logger
+except ImportError:
+    from logging_config import get_ml_logger
 logger = get_ml_logger(__name__)
 
 

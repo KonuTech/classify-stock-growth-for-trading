@@ -14,7 +14,10 @@ import warnings
 
 warnings.filterwarnings('ignore')
 # Set up logging using centralized configuration
-from .logging_config import get_ml_logger
+try:
+    from .logging_config import get_ml_logger
+except ImportError:
+    from logging_config import get_ml_logger
 logger = get_ml_logger(__name__)
 
 # Using XGBoost for robust handling of missing values and financial time series
@@ -47,7 +50,7 @@ class XGBoostPreprocessor:
         # Define columns to exclude from features
         exclude_cols = {
             'symbol', 'currency', 'trading_date_local', 'close_price', 'volume',
-            'open_price', 'high_price', 'low_price', 'target', 'growth_future_30d',
+            'open_price', 'high_price', 'low_price', 'target', 'growth_future_7d',
             # added manually:
             'year', 'year_month', 'year_week', 'year_quarter'
         }

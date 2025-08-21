@@ -10,7 +10,7 @@ from .feature_engineering import StockFeatureEngineer
 from .preprocessing import XGBoostPreprocessor
 from .model_trainer_optimized import XGBoostTrainer, MultiStockXGBoostTrainer, HighPerformanceXGBoostTrainer
 from .backtesting import TradingBacktester
-from .complete_pipeline import StockGrowthClassificationPipeline
+# Note: complete_pipeline moved to .temp - using test_pipeline as main reference
 
 __version__ = "1.0.0"
 __author__ = "Stock ML Pipeline"
@@ -22,6 +22,5 @@ __all__ = [
     'XGBoostTrainer',
     'HighPerformanceXGBoostTrainer',
     'MultiStockXGBoostTrainer',
-    'TradingBacktester',
-    'StockGrowthClassificationPipeline'
+    'TradingBacktester'
 ]

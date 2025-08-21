@@ -26,7 +26,10 @@ except ImportError:
     from backtesting import TradingBacktester
 
 # Set up logging using centralized configuration
-from .logging_config import get_ml_logger
+try:
+    from .logging_config import get_ml_logger
+except ImportError:
+    from logging_config import get_ml_logger
 logger = get_ml_logger(__name__)
 
 
@@ -168,9 +171,16 @@ def test_complete_pipeline():
         extractor.close()
 
 
-def test_single_stock_pipeline(symbol: str = 'XTB', include_ml: bool = True, force_cpu: bool = True):
-    """Test complete pipeline for a single stock including ML training and backtesting"""
-    logger.info(f"Testing {'complete ML' if include_ml else 'data'} pipeline for {symbol}...")
+def test_single_stock_pipeline(symbol: str = 'XTB', include_ml: bool = True, force_cpu: bool = True, grid_type: str = 'quick'):
+    """Test complete pipeline for a single stock including ML training and backtesting
+    
+    Args:
+        symbol: Stock symbol to test
+        include_ml: Include ML training and backtesting
+        force_cpu: Force CPU usage (recommended for reliability)
+        grid_type: Grid search type - 'quick', 'comprehensive', 'production'
+    """
+    logger.info(f"Testing {'complete ML' if include_ml else 'data'} pipeline for {symbol} (grid_type={grid_type})...")
     
     extractor = MultiStockDataExtractor()
     engineer = StockFeatureEngineer()
@@ -236,7 +246,7 @@ def test_single_stock_pipeline(symbol: str = 'XTB', include_ml: bool = True, for
             X_val=result['X_val'],
             y_val=result['y_val'],
             symbol=symbol,
-            grid_type='quick',  # Fast grid for testing
+            grid_type=grid_type,  # Use parameter for grid search type
             cv_folds=3
         )
         
@@ -245,13 +255,32 @@ def test_single_stock_pipeline(symbol: str = 'XTB', include_ml: bool = True, for
         logger.info(f"   Validation ROC-AUC: {training_results['val_roc_auc']:.4f}")
         logger.info(f"   Best params: {training_results['best_params']}")
         
-        # Step 6: Test Evaluation
+        # Step 6: Test Evaluation (use model from training results)
         logger.info(f"\n📋 STEP 6: TEST EVALUATION FOR {symbol}")
-        test_results = trainer.evaluate_model(
-            X_test=result['X_test'],
-            y_test=result['y_test'],
-            symbol=symbol
-        )
+        
+        # Get trained model and make predictions on test set
+        model = training_results['model']
+        X_test = result['X_test']
+        y_test = result['y_test']
+        
+        # Make predictions
+        test_predictions = model.predict(X_test)
+        test_probabilities = model.predict_proba(X_test)[:, 1]
+        
+        # Calculate metrics
+        from sklearn.metrics import accuracy_score, roc_auc_score, f1_score
+        test_accuracy = accuracy_score(y_test, test_predictions)
+        test_roc_auc = roc_auc_score(y_test, test_probabilities)
+        test_f1 = f1_score(y_test, test_predictions)
+        
+        # Create test results dict
+        test_results = {
+            'test_predictions': test_predictions,
+            'test_probabilities': test_probabilities,
+            'test_accuracy': test_accuracy,
+            'test_roc_auc': test_roc_auc,
+            'test_f1': test_f1
+        }
         
         logger.info(f"✅ Test evaluation completed for {symbol}")
         logger.info(f"   Test ROC-AUC: {test_results['test_roc_auc']:.4f}")
@@ -337,11 +366,11 @@ if __name__ == "__main__":
             print(f"\n🚀 Running {'Complete ML' if include_ml else 'Data'} Test for {symbol}...")
             if include_ml and force_cpu:
                 print("🔧 CPU mode forced - GPU acceleration disabled")
-            success = test_single_stock_pipeline(symbol, include_ml=include_ml, force_cpu=force_cpu)
+            success = test_single_stock_pipeline(symbol, include_ml=include_ml, force_cpu=force_cpu, grid_type='quick')
             
         else:
             print("Invalid choice. Running default single stock ML test...")
-            success = test_single_stock_pipeline('XTB', include_ml=True)
+            success = test_single_stock_pipeline('XTB', include_ml=True, grid_type='quick')
         
         # Final result
         print("\n" + "=" * 60)
@@ -368,3 +397,33 @@ if __name__ == "__main__":
         import traceback
         traceback.print_exc()
         sys.exit(1)
+
+
+# QUICK EXECUTION COMMANDS FOR DATAFRAME DOCUMENTATION:
+# 
+# 1. Test ML pipeline with quick grid search and generate DataFrame documentation:
+#    uv run python stock_ml/test_pipeline.py 1
+#
+# 2. Or run directly with Python:
+#    uv run python -c "
+#    import sys; sys.path.append('.')
+#    from stock_ml.test_pipeline import test_single_stock_pipeline
+#    test_single_stock_pipeline('XTB', include_ml=True, grid_type='quick')
+#    "
+#
+# 3. Test different symbols or grid types:
+#    uv run python -c "
+#    import sys; sys.path.append('.')
+#    from stock_ml.test_pipeline import test_single_stock_pipeline
+#    test_single_stock_pipeline('CDR', include_ml=True, grid_type='quick')
+#    "
+#
+# The DataFrame documentation files will be saved to:
+#    ./docs/knowledge_base/dataframe_schemas/
+#
+# Files generated:
+#    - feature_engineering_engineered_features_xtb.md
+#    - model_training_results_xtb.md  
+#    - model_predictions_xtb.md
+#    - backtest_results_xtb.md
+#    - trade_history_xtb.md

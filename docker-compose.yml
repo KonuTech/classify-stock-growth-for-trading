@@ -49,10 +49,11 @@ services:
     volumes:
       - ./stock_etl/airflow_dags:/opt/airflow/dags
       - ./stock_etl:/opt/airflow/stock_etl
+      - ./stock_ml:/opt/airflow/stock_ml
       - ./stock_etl/airflow_logs:/opt/airflow/logs
     command: >
       bash -c "
-        pip install holidays psycopg2-binary &&
+        pip install holidays psycopg2-binary pandas numpy scikit-learn xgboost imbalanced-learn TA-Lib &&
         export PYTHONPATH=/opt/airflow:$PYTHONPATH &&
         airflow standalone
       "

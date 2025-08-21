@@ -8,13 +8,241 @@ import numpy as np
 import logging
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timedelta
-import matplotlib.pyplot as plt
-import seaborn as sns
+# Optional visualization imports (for Airflow DAG compatibility)
+try:
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    VISUALIZATION_AVAILABLE = True
+except ImportError:
+    VISUALIZATION_AVAILABLE = False
 from pathlib import Path
 
 # Set up logging using centralized configuration
-from .logging_config import get_ml_logger
+try:
+    from .logging_config import get_ml_logger
+except ImportError:
+    from logging_config import get_ml_logger
 logger = get_ml_logger(__name__)
+
+def find_project_root() -> Path:
+    """Find project root by looking for CLAUDE.md"""
+    current_path = Path(__file__).parent
+    while current_path != current_path.parent:
+        if (current_path / 'CLAUDE.md').exists():
+            return current_path
+        current_path = current_path.parent
+    return Path(__file__).parent.parent  # Fallback
+
+def document_backtest_results(backtest_data: Dict[str, Any], symbol: str) -> None:
+    """Document backtesting results"""
+    
+    try:
+        if not backtest_data or 'error' in backtest_data:
+            return
+            
+        # Create documentation directory
+        project_root = find_project_root()
+        docs_dir = project_root / "docs" / "knowledge_base" / "dataframe_schemas"
+        docs_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create summary DataFrame
+        summary_df = pd.DataFrame([{
+            'symbol': symbol,
+            'total_return': backtest_data.get('total_return', 0),
+            'annualized_return': backtest_data.get('annualized_return', 0),
+            'sharpe_ratio': backtest_data.get('sharpe_ratio', 0),
+            'max_drawdown': backtest_data.get('max_drawdown', 0),
+            'win_rate': backtest_data.get('win_rate', 0),
+            'total_trades': backtest_data.get('total_trades', 0),
+            'winning_trades': backtest_data.get('winning_trades', 0),
+            'losing_trades': backtest_data.get('losing_trades', 0),
+            'avg_trade_return': backtest_data.get('avg_trade_return', 0),
+            'volatility': backtest_data.get('volatility', 0),
+            'final_capital': backtest_data.get('final_capital', 0),
+            'best_trade': backtest_data.get('best_trade', 0),
+            'worst_trade': backtest_data.get('worst_trade', 0)
+        }])
+        
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Create markdown content
+        step_name = backtest_data.get('step_name', 'BACKTESTING')
+        step_desc = backtest_data.get('step_description', 'Trading strategy backtesting performance summary')
+        
+        md_content = f"""# {step_name} - Backtest Results DataFrame Schema
+
+**Generated**: {timestamp}  
+**Symbol**: {symbol}  
+**Pipeline Step**: {step_name}
+**Database Table**: ml_backtest_results  
+**Description**: {step_desc}
+
+## Performance Summary
+
+- **Total Return**: {backtest_data.get('total_return', 0):.2%}
+- **Annualized Return**: {backtest_data.get('annualized_return', 0):.2%}
+- **Sharpe Ratio**: {backtest_data.get('sharpe_ratio', 0):.3f}
+- **Max Drawdown**: {backtest_data.get('max_drawdown', 0):.2%}
+- **Win Rate**: {backtest_data.get('win_rate', 0):.1%}
+- **Total Trades**: {backtest_data.get('total_trades', 0)}
+- **Final Capital**: ${backtest_data.get('final_capital', 0):,.2f}
+
+## Column Details
+
+| Column | Data Type | Description |
+|--------|-----------|-------------|
+| symbol | object | Stock symbol identifier |
+| total_return | float64 | Total return percentage |
+| annualized_return | float64 | Annualized return percentage |
+| sharpe_ratio | float64 | Risk-adjusted return ratio |
+| max_drawdown | float64 | Maximum drawdown percentage |
+| win_rate | float64 | Percentage of winning trades |
+| total_trades | int64 | Total number of trades executed |
+| winning_trades | int64 | Number of profitable trades |
+| losing_trades | int64 | Number of losing trades |
+| avg_trade_return | float64 | Average return per trade |
+| volatility | float64 | Portfolio volatility |
+| final_capital | float64 | Final capital amount |
+| best_trade | float64 | Best single trade return |
+| worst_trade | float64 | Worst single trade return |
+
+## Sample Data
+
+"""
+        
+        md_content += summary_df.to_markdown(index=False, floatfmt=".4f")
+        
+        # Document trade history if available
+        if 'trades' in backtest_data and backtest_data['trades']:
+            trades_df = pd.DataFrame(backtest_data['trades'])
+            md_content += f"""
+
+## Trade History Sample (First 5 Trades)
+
+"""
+            if len(trades_df) >= 5:
+                md_content += trades_df.head(5).to_markdown(index=False, floatfmt=".4f")
+            else:
+                md_content += trades_df.to_markdown(index=False, floatfmt=".4f")
+                
+            md_content += f"""
+
+### Trade History Schema
+| Column | Data Type | Description |
+|--------|-----------|-------------|
+| entry_date | object | Trade entry date |
+| exit_date | object | Trade exit date |
+| entry_price | float64 | Entry price per share |
+| exit_price | float64 | Exit price per share |
+| shares | float64 | Number of shares traded |
+| return_pct | float64 | Return percentage for this trade |
+| capital_after | float64 | Capital balance after trade |
+| prediction_probability | float64 | Model prediction probability |
+"""
+        
+        md_content += """
+
+## Database Integration Notes
+
+### Recommended PostgreSQL Schema
+```sql
+CREATE TABLE ml_backtest_results (
+    id BIGSERIAL PRIMARY KEY,
+    symbol VARCHAR(10) NOT NULL,
+    backtest_date DATE NOT NULL,
+    total_return DECIMAL(8,6),
+    annualized_return DECIMAL(8,6),
+    sharpe_ratio DECIMAL(8,4),
+    max_drawdown DECIMAL(8,6),
+    win_rate DECIMAL(5,4),
+    total_trades INTEGER,
+    winning_trades INTEGER,
+    losing_trades INTEGER,
+    avg_trade_return DECIMAL(8,6),
+    volatility DECIMAL(8,6),
+    final_capital DECIMAL(15,2),
+    best_trade DECIMAL(8,6),
+    worst_trade DECIMAL(8,6),
+    trade_history JSONB,  -- Store trade details as JSON
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### Separate Trades Table (Alternative)
+```sql
+CREATE TABLE ml_trades (
+    id BIGSERIAL PRIMARY KEY,
+    backtest_id BIGINT REFERENCES ml_backtest_results(id),
+    symbol VARCHAR(10) NOT NULL,
+    entry_date DATE NOT NULL,
+    exit_date DATE,
+    entry_price DECIMAL(15,6),
+    exit_price DECIMAL(15,6),
+    shares DECIMAL(15,4),
+    return_pct DECIMAL(8,6),
+    capital_after DECIMAL(15,2),
+    prediction_probability DECIMAL(8,6),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+"""
+        
+        # Save backtest results documentation
+        filename = f"step07_backtest_results_{symbol.lower()}.md"
+        file_path = docs_dir / filename
+        
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(md_content)
+            
+        print(f"📋 Documented backtest results: {file_path}")
+        
+        # Also document trade history separately if significant
+        if 'trades' in backtest_data and backtest_data['trades'] and len(backtest_data['trades']) > 0:
+            trades_df = pd.DataFrame(backtest_data['trades'])
+            
+            # Create separate trade history documentation
+            trade_md_content = f"""# STEP 7 - BACKTESTING - Trade History DataFrame Schema
+
+**Generated**: {timestamp}  
+**Symbol**: {symbol}  
+**Pipeline Step**: STEP 7 - BACKTESTING (Trade Details)
+**Database Table**: ml_trades (or JSONB in ml_backtest_results)  
+**Description**: Individual trading transactions with entry/exit details, returns, and prediction probabilities
+
+## Trade History Overview
+
+- **Total Trades**: {len(trades_df)}
+- **Columns**: {len(trades_df.columns)}
+
+## Column Details
+
+| Column | Data Type | Description |
+|--------|-----------|-------------|
+"""
+            
+            for col in trades_df.columns:
+                dtype = str(trades_df[col].dtype)
+                trade_md_content += f"| {col} | {dtype} | Trading transaction {col.replace('_', ' ')} |\n"
+            
+            trade_md_content += f"""
+
+## Sample Trades (First 10)
+
+"""
+            trade_md_content += trades_df.head(10).to_markdown(index=False, floatfmt=".4f")
+            
+            # Save trade history documentation
+            trade_filename = f"step07_trade_history_{symbol.lower()}.md"
+            trade_file_path = docs_dir / trade_filename
+            
+            with open(trade_file_path, 'w', encoding='utf-8') as f:
+                f.write(trade_md_content)
+                
+            print(f"📋 Documented trade history: {trade_file_path}")
+            
+    except Exception as e:
+        print(f"❌ Failed to document backtest results for {symbol}: {e}")
 
 
 class TradingBacktester:
@@ -73,21 +301,21 @@ class TradingBacktester:
         cash_values = [capital]
         
         # Get actual future returns
-        if 'growth_future_30d' in test_df.columns:
-            actual_returns = test_df['growth_future_30d'].values - 1
+        if 'growth_future_7d' in test_df.columns:
+            actual_returns = test_df['growth_future_7d'].values - 1
         else:
-            # Calculate 30-day forward returns if not available
+            # Calculate 7-day forward returns if not available
             prices = test_df['close_price'].values
             actual_returns = np.full(len(prices), np.nan)
-            for i in range(len(prices) - 30):
-                if i + 30 < len(prices):
-                    actual_returns[i] = (prices[i + 30] / prices[i]) - 1
+            for i in range(len(prices) - 7):
+                if i + 7 < len(prices):
+                    actual_returns[i] = (prices[i + 7] / prices[i]) - 1
         
         dates = test_df['trading_date_local'].values
         prices = test_df['close_price'].values
         
         # Trading simulation
-        for i in range(len(test_df) - 30):  # Leave buffer for 30-day returns
+        for i in range(len(test_df) - 7):  # Leave buffer for 7-day returns
             current_date = dates[i]
             current_price = prices[i]
             model_probability = probabilities[i]
@@ -152,13 +380,13 @@ class TradingBacktester:
             
         # Close final position if open
         if position > 0:
-            final_price = prices[-31]  # Use price 30 days before end
+            final_price = prices[-8]  # Use price 7 days before end
             proceeds = position * final_price * (1 - self.transaction_cost)
             capital += proceeds
             trade_return = (final_price - entry_price) / entry_price
             
             trades.append({
-                'date': dates[-31],
+                'date': dates[-8],
                 'action': 'SELL',
                 'price': final_price,
                 'shares': position,
@@ -365,6 +593,11 @@ class TradingBacktester:
                 
                 individual_results[symbol] = backtest_result
                 
+                # Document backtest results
+                backtest_result['step_name'] = 'STEP 7 - BACKTESTING'
+                backtest_result['step_description'] = 'Trading strategy backtesting results with performance metrics, risk analysis, and individual trade history'
+                document_backtest_results(backtest_result, symbol)
+                
             except Exception as e:
                 logger.error(f"Failed to backtest {symbol}: {e}")
                 continue
@@ -520,6 +753,10 @@ class TradingBacktester:
     def plot_performance(self, symbol: str, save_path: Optional[str] = None):
         """Plot backtest performance for a single stock"""
         
+        if not VISUALIZATION_AVAILABLE:
+            logger.warning("Visualization libraries not available. Skipping plot generation.")
+            return
+        
         if symbol not in self.backtest_results:
             raise ValueError(f"No backtest results found for {symbol}")
             
@@ -577,8 +814,8 @@ if __name__ == "__main__":
         'volume': np.random.randint(1000, 10000, n_samples)
     })
     
-    # Add 30-day forward returns
-    test_df['growth_future_30d'] = test_df['close_price'].shift(-30) / test_df['close_price']
+    # Add 7-day forward returns
+    test_df['growth_future_7d'] = test_df['close_price'].shift(-7) / test_df['close_price']
     
     # Sample predictions (slightly better than random)
     probabilities = np.random.beta(2, 2, n_samples)  # Probabilities between 0 and 1
