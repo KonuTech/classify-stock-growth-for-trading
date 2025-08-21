@@ -15,6 +15,7 @@ This is a stock data ETL pipeline project that extracts financial data from Stoo
 - **Data integrity**: Comprehensive constraints and validation at database level
 
 ### Key Components
+**ETL Pipeline:**
 - **stock_etl.core.models**: Pydantic models for validation and type safety
 - **stock_etl.core.database**: Database connection management with pooling
 - **stock_etl.data.stooq_extractor**: Data extraction from Stooq financial service
@@ -24,11 +25,24 @@ This is a stock data ETL pipeline project that extracts financial data from Stoo
 - **stock_etl.utils.dag_utils**: DAG utilities for execution mode detection and logging
 - **stock_etl.utils.polish_trading_calendar**: Warsaw Stock Exchange trading calendar
 
+**ML Pipeline:**
+- **stock_ml.data_extractor**: Multi-stock data extraction from PostgreSQL with quality filtering
+- **stock_ml.feature_engineering**: TA-Lib technical indicators and market features
+- **stock_ml.model_trainer_optimized**: GPU-accelerated XGBoost classification with grid search
+- **stock_ml.backtesting**: Trading strategy backtesting with performance metrics
+- **stock_ml.database_operations**: Complete ML data persistence layer with CRUD operations
+- **stock_ml.schema_validator**: Data validation against database schema before insertion
+
+**Web Application:**
+- **web-app/backend/src/index.js**: Express.js API server with PostgreSQL integration
+- **web-app/frontend/src/App.tsx**: React dashboard with TypeScript and Tailwind CSS
+- **web-app/frontend/src/components/**: Reusable UI components (StockDetail, StockFilter, etc.)
+- **web-app/frontend/src/hooks/**: Custom React hooks for data fetching and state management
+
 ### Data Flow
-1. Extract data from Stooq API (CSV format)
-2. Validate using Pydantic models (StooqRecord)
-3. Transform and load into normalized PostgreSQL tables
-4. Track ETL jobs and data quality metrics
+1. **ETL Pipeline**: Extract data from Stooq API → Validate using Pydantic models → Load into PostgreSQL → Track jobs
+2. **ML Pipeline**: Extract from PostgreSQL → Feature engineering (180+ features) → XGBoost training → Backtesting → Store results  
+3. **Web Application**: React frontend ↔ Express.js API ↔ PostgreSQL (`prod_stock_data` schema)
 
 ## Essential Commands
 
@@ -154,10 +168,33 @@ uv run pytest tests/ -v --cov=stock_etl
 uv run --with jupyter jupyter lab
 
 # Start JupyterLab with specific notebook
-uv run jupyter lab docs/stock_analysis_reports_fixed.ipynb
+uv run jupyter lab docs/notebooks/XGBoost_Pipeline_Validation-05.ipynb
 
 # Access Jupyter interface
 # URL: http://localhost:8888 (token will be displayed in terminal)
+```
+
+### Web Application Development
+```bash
+# Backend API Server (Express.js + PostgreSQL)
+cd web-app/backend
+npm install                          # Install dependencies
+npm run dev                          # Development server with nodemon
+npm start                           # Production server
+# API available at: http://localhost:3001
+
+# Frontend React Application (TypeScript + Tailwind CSS)
+cd web-app/frontend  
+npm install                          # Install dependencies
+npm start                           # Development server with hot reload
+npm run build                       # Production build
+npm test                            # Run test suite
+# Frontend available at: http://localhost:3000
+
+# Web Application Stack Status Check
+curl http://localhost:3001/health    # Backend health check
+curl http://localhost:3001/api/stocks # Test API endpoint
+# Frontend: http://localhost:3000 (React dashboard)
 ```
 
 ## Database Schemas
@@ -202,6 +239,15 @@ DB_PASSWORD=postgres
 - **pgAdmin**: Available on port 5050 (admin@admin.com/admin)
 - **Airflow Metadata DB**: localhost:5432/airflow_metadata (airflow/airflow)
 - **Stock Business DB**: localhost:5432/stock_data (stock/stock)
+
+### Web Application Services  
+- **Backend API (Express.js)**: http://localhost:3001 - RESTful API with PostgreSQL integration
+- **Frontend Dashboard (React)**: http://localhost:3000 - Interactive stock analysis dashboard
+- **API Endpoints**: 
+  - `GET /api/stocks` - List all stocks with metadata
+  - `GET /api/stocks/:symbol` - Detailed stock data with price history  
+  - `GET /api/predictions/:symbol` - ML predictions and trading signals
+  - `GET /api/models` - ML model performance metrics
 
 ### Docker Management
 ```bash
@@ -420,6 +466,67 @@ logger = get_ml_logger(__name__)  # Creates logs/stock_ml/{module_name}.log
 - OHLC price relationship validation
 - Database constraints enforce data integrity
 - Hash-based duplicate detection
+
+## Web Application Architecture (`web-app/`)
+
+### Full-Stack Architecture
+The web application provides an intuitive interface for the stock analysis platform with real-time data integration:
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Frontend      │───▶│   Backend API   │───▶│  PostgreSQL     │
+│  React + TS     │    │   Express.js    │    │ prod_stock_data │
+│  Port 3000      │    │   Port 3001     │    │ Port 5432       │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+### Frontend Architecture (`web-app/frontend/`)
+- **Framework**: React 18 with TypeScript for type safety
+- **Styling**: Tailwind CSS for responsive design and dark/light themes  
+- **State Management**: React hooks (useState, useEffect, useMemo) + Context API
+- **Key Components**:
+  - `src/App.tsx`: Main application with stock dashboard and filtering
+  - `src/components/StockDetail.tsx`: Individual stock analysis modal
+  - `src/components/StockComparison.tsx`: Side-by-side stock comparison
+  - `src/components/StockFilter.tsx`: Search and sorting functionality
+  - `src/hooks/useStockData.ts`: Custom hook for API data fetching
+
+### Backend Architecture (`web-app/backend/`)
+- **Framework**: Express.js with TypeScript support
+- **Database**: PostgreSQL integration using `pg` driver with connection pooling
+- **Security**: CORS middleware, parameterized queries, environment variable configuration
+- **Key Endpoints**:
+  - `GET /api/stocks` - Stock list with metadata (symbol, name, price, record count)
+  - `GET /api/stocks/:symbol?timeframe=3M` - Stock details with OHLCV history
+  - `GET /api/predictions/:symbol?limit=30` - ML predictions and trading signals  
+  - `GET /api/models` - ML model performance metrics (ROC-AUC, accuracy)
+  - `GET /health` - Health check endpoint
+
+### Database Integration
+- **Production Schema**: Connects directly to `prod_stock_data` schema
+- **Real-time Data**: Live stock prices and historical data (50,000+ records)
+- **ML Integration**: Access to trained models, predictions, and backtesting results
+- **Optimized Queries**: Parameterized SQL with PostgreSQL-specific optimizations
+
+### Key Features
+- **Interactive Dashboard**: Real-time portfolio overview with search and filtering
+- **Stock Analysis**: Click-through details with historical price charts (1M, 3M, 6M, 1Y timeframes)  
+- **ML Predictions**: Display of trading signals and model confidence scores
+- **Responsive Design**: Mobile-optimized interface with dark/light theme toggle
+- **Watchlist Management**: Personal stock tracking with real-time updates
+
+### Development Workflow
+```bash
+# Start complete stack
+make start                           # Infrastructure (PostgreSQL + Airflow)
+cd web-app/backend && npm run dev    # Backend API (with hot reload)
+cd web-app/frontend && npm start     # Frontend React app (with hot reload)
+
+# Development URLs:
+# Frontend: http://localhost:3000
+# Backend API: http://localhost:3001  
+# Database: localhost:5432/stock_data
+```
 
 ## Machine Learning Pipeline (`stock_ml/`)
 
