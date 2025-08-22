@@ -1,5 +1,7 @@
-2025-08-21 11:56:48,323 - prerequisite_check - INFO - check_execution_prerequisites:202 - Prerequisites passed - proceeding with backfill mode
-2025-08-21 11:57:06,133 - prerequisite_check - INFO - check_execution_prerequisites:202 - Prerequisites passed - proceeding with backfill mode
-2025-08-21 12:11:21,083 - prerequisite_check - INFO - check_execution_prerequisites:202 - Prerequisites passed - proceeding with backfill mode
-2025-08-21 12:23:23,594 - prerequisite_check - INFO - check_execution_prerequisites:202 - Prerequisites passed - proceeding with incremental mode
-2025-08-21 18:00:02,590 - prerequisite_check - INFO - check_execution_prerequisites:202 - Prerequisites passed - proceeding with incremental mode
+2025-08-22 12:03:18,579 - prerequisite_check - INFO - check_execution_prerequisites:202 - Prerequisites passed - proceeding with backfill mode
+2025-08-22 12:08:53,037 - prerequisite_check - INFO - check_execution_prerequisites:202 - Prerequisites passed - proceeding with backfill mode
+2025-08-22 12:09:25,963 - prerequisite_check - INFO - check_execution_prerequisites:202 - Prerequisites passed - proceeding with incremental mode
+2025-08-22 12:19:24,260 - prerequisite_check - INFO - check_execution_prerequisites:202 - Prerequisites passed - proceeding with incremental mode
+2025-08-22 12:22:55,795 - prerequisite_check - INFO - check_execution_prerequisites:202 - Prerequisites passed - proceeding with backfill mode
+2025-08-22 12:22:57,950 - prerequisite_check - INFO - check_execution_prerequisites:202 - Prerequisites passed - proceeding with backfill mode
+2025-08-22 12:23:17,839 - prerequisite_check - INFO - check_execution_prerequisites:202 - Prerequisites passed - proceeding with backfill mode

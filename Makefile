@@ -1,17 +1,22 @@
-.PHONY: start stop restart start-services extract-credentials clean help init-dev init-test init-prod setup-airflow fix-schema-permissions trigger-dev-dag trigger-test-dag trigger-prod-dag trigger-dev-ml-dags trigger-test-ml-dags trigger-prod-ml-dags trigger-ml-stock start-with-web web-start web-stop web-restart web-build web-logs web-clean web-test web-status restart-airflow dev-restart docker-restart docker-clean dev-web-start dev-web-stop dev-web-restart dev-web-status dev-web-backend dev-web-frontend dev-web-install
+.PHONY: start stop restart start-infrastructure start-services extract-credentials clean help init-dev init-test init-prod setup-airflow fix-schema-permissions trigger-dev-dag trigger-test-dag trigger-prod-dag trigger-dev-ml-dags trigger-test-ml-dags trigger-prod-ml-dags trigger-ml-stock web-start web-stop web-restart web-build web-logs web-clean web-test web-status restart-airflow dev-restart docker-restart docker-clean dev-web-start dev-web-stop dev-web-restart dev-web-status dev-web-backend dev-web-frontend dev-web-install
 
 # Default target
 help:
 	@echo "Available commands:"
 	@echo ""
-	@echo "🚀 Infrastructure:"
-	@echo "  make start              - COMPLETE DEPLOYMENT: services + schemas + DAGs + credentials"
+	@echo "🚀 Complete Deployment:"
+	@echo "  make start              - COMPLETE DEPLOYMENT: infrastructure + web app + schemas + DAGs"
+	@echo "  make start-infrastructure - Start infrastructure only (PostgreSQL + Airflow + pgAdmin)"
 	@echo "  make start-services     - Start Docker services only (no schemas/credentials)"
+	@echo ""
+	@echo "🔧 Environment Setup:"
 	@echo "  make init-dev           - Initialize dev environment + trigger dev DAG (no credentials)"
 	@echo "  make init-test          - Initialize test environment + trigger test DAG (no credentials)"  
 	@echo "  make init-prod          - Initialize prod environment with ML tables (no credentials)"
 	@echo "  make extract-credentials - Extract service credentials to .env file"
 	@echo "  make setup-airflow      - Setup Airflow database connections only"
+	@echo ""
+	@echo "🔄 Service Management:"
 	@echo "  make stop               - Stop all services"
 	@echo "  make restart            - Restart infrastructure only (Docker services)"
 	@echo "  make docker-restart     - Restart ALL Docker services (preserves data)"
@@ -30,9 +35,6 @@ help:
 	@echo "  make trigger-ml-stock STOCK=XTB - Trigger ML training for specific stock (test & prod)"
 	@echo ""
 	@echo "🌐 Web Application (Production - Docker):"
-	@echo "  make start-with-web     - Start complete infrastructure WITH Docker web application"
-	@echo "  make docker-restart     - Restart ALL Docker services (preserves data)"
-	@echo "  make docker-clean       - CLEAN restart with database reinitialization (deletes data)"
 	@echo "  make web-start          - Start Docker web application services only"
 	@echo "  make web-stop           - Stop Docker web application services"
 	@echo "  make web-restart        - Restart Docker web application with latest changes"
@@ -56,8 +58,8 @@ help:
 	@echo "  make help               - Show this help"
 
 # Start services with complete setup (all schemas + airflow + DAGs)
-start:
-	@echo "Starting all services..."
+start-infrastructure:
+	@echo "Starting infrastructure services only..."
 	docker-compose up -d postgres pgadmin airflow
 	@echo "Waiting for services to initialize..."
 	@sleep 30
@@ -76,7 +78,7 @@ start:
 	@make trigger-dev-dag
 	@make trigger-test-dag
 	@make trigger-prod-dag
-	@echo "✅ Complete infrastructure deployment ready!"
+	@echo "✅ Infrastructure deployment ready!"
 	@echo "📊 Schemas: dev_stock_data ✅ test_stock_data ✅ prod_stock_data ✅"
 	@echo "🚀 ETL DAGs: dev_stock_etl_pipeline ✅ test_stock_etl_pipeline ✅ prod_stock_etl_pipeline ✅"
 	@echo "🤖 ML DAGs: Dynamic multi-environment per-stock ML training (ready)"
@@ -368,7 +370,7 @@ clean:
 # ==================== WEB APPLICATION COMMANDS (INTEGRATED) ====================
 
 # Start complete infrastructure WITH web application
-start-with-web:
+start:
 	@echo "🚀 Starting complete infrastructure with web application..."
 	docker-compose up -d postgres pgadmin airflow web-backend web-frontend
 	@echo "Waiting for services to initialize..."
@@ -383,12 +385,22 @@ start-with-web:
 	@uv run python -m stock_etl.cli database init-prod
 	@make fix-schema-permissions
 	@make setup-airflow
-	@echo "✅ Complete infrastructure with web application ready!"
+	@echo "✅ All schemas initialized and permissions set!"
+	@echo "Triggering all environment DAGs..."
+	@make trigger-dev-dag
+	@make trigger-test-dag
+	@make trigger-prod-dag
+	@echo "✅ Complete deployment with web application ready!"
 	@echo "📊 Schemas: dev_stock_data ✅ test_stock_data ✅ prod_stock_data ✅"
-	@echo "🌐 Frontend: http://localhost:3000"
-	@echo "🔧 Backend API: http://localhost:3001"
-	@echo "🚀 Airflow UI: http://localhost:8080"
-	@echo "📊 pgAdmin: http://localhost:5050"
+	@echo "🚀 ETL DAGs: dev_stock_etl_pipeline ✅ test_stock_etl_pipeline ✅ prod_stock_etl_pipeline ✅"
+	@echo "🤖 ML DAGs: Dynamic multi-environment per-stock ML training (ready)"
+	@echo ""
+	@echo "🌐 All Services Ready:"
+	@echo "  Frontend:     http://localhost:3000 (React Dashboard)"
+	@echo "  Backend API:  http://localhost:3001 (Express.js API)"
+	@echo "  Airflow UI:   http://localhost:8080 (ETL/ML Pipeline)"
+	@echo "  pgAdmin:      http://localhost:5050 (Database Management)"
+	@echo ""
 	@echo "Waiting for Airflow to fully initialize credentials..."
 	@sleep 20
 	@make extract-credentials

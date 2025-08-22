@@ -1,5 +1,10 @@
-2025-08-21 11:56:48,293 - job_creation - INFO - create_etl_job_record:299 - Created ETL job record: 1
-2025-08-21 12:02:23,441 - job_creation - INFO - create_etl_job_record:299 - Created ETL job record: 1
-2025-08-21 12:11:23,122 - job_creation - INFO - create_etl_job_record:299 - Created ETL job record: 2
-2025-08-21 12:23:25,330 - job_creation - INFO - create_etl_job_record:299 - Created ETL job record: 3
-2025-08-21 18:00:04,681 - job_creation - INFO - create_etl_job_record:299 - Created ETL job record: 34
+2025-08-22 12:03:20,370 - job_creation - INFO - create_etl_job_record:299 - Created ETL job record: 1
+2025-08-22 12:08:54,053 - job_creation - INFO - create_etl_job_record:299 - Created ETL job record: 1
+2025-08-22 12:09:28,056 - job_creation - INFO - create_etl_job_record:299 - Created ETL job record: 2
+2025-08-22 12:19:26,724 - job_creation - ERROR - create_etl_job_record:303 - Failed to create ETL job record: relation "prod_stock_data.etl_jobs" does not exist
+LINE 2:                 INSERT INTO prod_stock_data.etl_jobs (
+                                    ^
+
+2025-08-22 12:22:58,502 - job_creation - INFO - create_etl_job_record:299 - Created ETL job record: 1
+2025-08-22 12:22:59,458 - job_creation - INFO - create_etl_job_record:299 - Created ETL job record: 1
+2025-08-22 12:23:22,701 - job_creation - INFO - create_etl_job_record:299 - Created ETL job record: 1

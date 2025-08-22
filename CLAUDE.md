@@ -4,15 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a stock data ETL pipeline project that extracts financial data from Stooq, stores it in a normalized PostgreSQL database, and provides Apache Airflow integration for orchestration. The project follows a normalized database design with proper data validation and structured logging.
+This is a comprehensive AI-powered stock analysis platform that combines ETL data processing, GPU-accelerated machine learning, and an interactive web application. The project extracts financial data from Stooq (Polish Stock Exchange), stores it in a normalized PostgreSQL database, provides Apache Airflow orchestration, trains XGBoost models for stock growth prediction, and serves real-time analysis through a React web dashboard.
 
 ## Core Architecture
 
 ### Database Design
 - **Normalized schema** with separate tables for exchanges, instruments, stocks, indices, and price data
-- **Multi-schema support**: `dev_stock_data`, `test_stock_data`, `stock_data_test`
+- **Multi-schema support**: `dev_stock_data`, `test_stock_data`, `prod_stock_data`
 - **Timezone-aware**: Stores both local and UTC timestamps with epoch support
 - **Data integrity**: Comprehensive constraints and validation at database level
+- **ML tables**: Complete ML pipeline storage (models, features, predictions, backtests)
 
 ### Key Components
 **ETL Pipeline:**
@@ -21,13 +22,13 @@ This is a stock data ETL pipeline project that extracts financial data from Stoo
 - **stock_etl.data.stooq_extractor**: Data extraction from Stooq financial service
 - **stock_etl.database.operations**: Database CRUD operations for normalized schema
 - **stock_etl.cli**: Command-line interface for all ETL operations
-- **stock_etl.airflow_dags.stock_etl_dag**: Unified Airflow DAG with comprehensive workflow
-- **stock_etl.utils.dag_utils**: DAG utilities for execution mode detection and logging
+- **stock_etl.airflow_dags.stock_etl_dag**: Unified Airflow DAG with smart execution mode detection
+- **stock_etl.utils.dag_utils**: 4-layer intelligent processing logic for execution mode detection
 - **stock_etl.utils.polish_trading_calendar**: Warsaw Stock Exchange trading calendar
 
 **ML Pipeline:**
 - **stock_ml.data_extractor**: Multi-stock data extraction from PostgreSQL with quality filtering
-- **stock_ml.feature_engineering**: TA-Lib technical indicators and market features
+- **stock_ml.feature_engineering**: 180+ TA-Lib technical indicators and physics-inspired features
 - **stock_ml.model_trainer_optimized**: GPU-accelerated XGBoost classification with grid search
 - **stock_ml.backtesting**: Trading strategy backtesting with performance metrics
 - **stock_ml.database_operations**: Complete ML data persistence layer with CRUD operations
@@ -36,7 +37,7 @@ This is a stock data ETL pipeline project that extracts financial data from Stoo
 **Web Application:**
 - **web-app/backend/src/index.js**: Express.js API server with PostgreSQL integration
 - **web-app/frontend/src/App.tsx**: React dashboard with TypeScript and Tailwind CSS
-- **web-app/frontend/src/components/**: Reusable UI components (StockDetail, StockFilter, etc.)
+- **web-app/frontend/src/components/**: Reusable UI components (StockDetail, StockFilter, charts)
 - **web-app/frontend/src/hooks/**: Custom React hooks for data fetching and state management
 
 ### Data Flow
@@ -48,13 +49,19 @@ This is a stock data ETL pipeline project that extracts financial data from Stoo
 
 ### Complete Infrastructure Deployment
 ```bash
-# 🚀 COMPLETE DEPLOYMENT: services + schemas + DAGs (recommended)
+# 🚀 COMPLETE DEPLOYMENT: services + schemas + DAGs + automatic data loading (recommended)
 make start
 
+# 🌐 COMPLETE PLATFORM: includes web application (React frontend + Express.js backend)
+make start-with-web
+
+# 🏗️ INFRASTRUCTURE ONLY: services without automatic DAG triggering
+make start-infrastructure
+
 # Alternative: Initialize specific environment
-make init-dev    # Initialize dev environment + trigger dev DAG
-make init-test   # Initialize test environment + trigger test DAG
-make init-prod   # Initialize prod environment + trigger prod DAG (ML tables included)
+make init-dev    # Initialize dev environment + trigger dev DAG (smart detection)
+make init-test   # Initialize test environment + trigger test DAG (full_backfill - 50,000+ records)
+make init-prod   # Initialize prod environment + trigger prod DAG (full_backfill + ML tables)
 
 # Manual development setup
 uv sync --group dev
@@ -63,7 +70,7 @@ docker-compose up -d postgres pgadmin airflow
 
 ### Individual Environment Setup
 ```bash
-# Install dependencies (includes ML libraries: scikit-learn, TA-Lib, imbalanced-learn)
+# Install dependencies (includes ML libraries: scikit-learn, TA-Lib, XGBoost, imbalanced-learn)
 uv sync
 
 # Install with development dependencies (includes jupyterlab, plotting libraries)
@@ -78,7 +85,7 @@ uv run python -m stock_etl.cli database init-prod  # Includes ML tables
 uv run python -m stock_etl.cli database test-connection --schema dev_stock_data
 
 # Verify ML dependencies (TA-Lib requires system installation)
-uv run python -c "import talib; print('TA-Lib version:', talib.__version__)"
+uv run python -c "import talib, xgboost; print('TA-Lib version:', talib.__version__); print('XGBoost version:', xgboost.__version__)"
 ```
 
 ### ML Dependencies & System Requirements
@@ -95,11 +102,12 @@ conda install -c conda-forge ta-lib
 
 # Verify all ML dependencies
 uv run python -c "
-import pandas, numpy, sklearn, talib, imblearn
+import pandas, numpy, sklearn, talib, imblearn, xgboost
 print('✅ All ML dependencies installed successfully')
 print(f'pandas: {pandas.__version__}')
 print(f'scikit-learn: {sklearn.__version__}')
 print(f'TA-Lib: {talib.__version__}')
+print(f'XGBoost: {xgboost.__version__}')
 "
 ```
 
@@ -125,7 +133,7 @@ uv run python -m stock_etl.cli pipeline --schema dev_stock_data
 ```bash
 # Infrastructure management
 make help                    # Show all available commands
-make start                   # Complete deployment (recommended)
+make start                   # Complete deployment with automatic DAG triggering (recommended)
 make stop                    # Stop all services
 make restart                 # Restart infrastructure only (Docker services)
 make docker-restart          # Restart ALL Docker services (preserves data)
@@ -133,12 +141,16 @@ make docker-clean            # CLEAN restart with database reinitialization (del
 make clean                   # Stop and remove all data/logs
 
 # Environment management
-make trigger-dev-dag         # Trigger development ETL DAG
-make trigger-test-dag        # Trigger test ETL DAG
-make trigger-prod-dag        # Trigger production ETL DAG
+make trigger-dev-dag         # Trigger development ETL DAG (smart detection)
+make trigger-test-dag        # Trigger test ETL DAG (explicit full_backfill - 50,000+ records)
+make trigger-prod-dag        # Trigger production ETL DAG (explicit full_backfill - 50,000+ records)
 make setup-airflow           # Setup Airflow connections only
 make fix-schema-permissions  # Fix database permissions
 make extract-credentials     # Extract service credentials to .env
+
+# ML DAGs (Test & Production Only)
+make trigger-test-ml-dags    # Trigger all test ML DAGs (test_ml_pipeline_*)
+make trigger-prod-ml-dags    # Trigger all production ML DAGs (prod_ml_pipeline_*)
 
 # Web Application (Docker Production)
 make start-with-web          # Start complete infrastructure WITH Docker web application
@@ -233,6 +245,43 @@ curl -s "http://localhost:3001/api/predictions/XTB?limit=5"        # ML trading 
 curl -s -I http://localhost:3000 | head -5                        # Frontend accessibility
 ```
 
+## 🧠 Smart Execution Mode Detection (August 2025)
+
+### 4-Layer Intelligent Processing Logic
+The ETL DAGs now feature advanced smart detection that automatically chooses the optimal processing strategy:
+
+**Layer 1: Manual Configuration Override** (highest priority)
+- Per-instrument overrides: `{"instruments": {"XTB": "historical", "PKN": "incremental"}}`
+- Global mode overrides: `{"extraction_mode": "full_backfill"}`
+
+**Layer 2: 🆕 Database State Analysis** (automatic full_backfill detection)
+```sql
+-- Smart detection automatically analyzes database state:
+SELECT COUNT(*) as record_count FROM stock_prices 
+WHERE stock_id = (SELECT id FROM base_instruments WHERE symbol = 'XTB')
+
+-- Decision logic:
+-- record_count = 0     → full_backfill (unlimited backfill)
+-- record_count < 30    → full_backfill (sparse data)  
+-- latest_date > 7 days → historical (500-1000 records)
+-- current data        → incremental (1 record)
+```
+
+**Layer 3: DAG Execution Context**
+- Backfill runs → historical mode
+- Regular/manual runs → incremental mode
+
+**Layer 4: Safety Default**
+- Incremental mode (1 record) for unknown scenarios
+
+### Smart Mode Benefits for New Deployments
+**When you run `make start` on a fresh system:**
+1. **Database schemas created** but contain 0 stock price records
+2. **DAGs triggered automatically** with smart mode detection
+3. **Smart mode detects 0 rows** for all instruments
+4. **Automatically switches to unlimited full_backfill** without manual intervention
+5. **Result: Complete historical data** (50,000+ records) loaded automatically
+
 ## Database Schemas
 
 ### Schema Structure
@@ -307,8 +356,8 @@ make clean
 ### Multi-Environment DAG Architecture ✅ WORKING
 Dynamic environment-specific DAGs in `stock_etl/airflow_dags/stock_etl_dag.py`:
 
-- **Environment-Specific DAGs**: `dev_stock_etl_pipeline` (active), `test_stock_etl_pipeline` (paused), `prod_stock_etl_pipeline` (paused)
-- **Smart Execution Mode Detection**: Automatically detects backfill vs incremental runs
+- **Environment-Specific DAGs**: `dev_stock_etl_pipeline`, `test_stock_etl_pipeline`, `prod_stock_etl_pipeline`
+- **Smart Execution Mode Detection**: 4-layer intelligent processing automatically detects backfill vs incremental runs
 - **Polish Trading Calendar Integration**: Uses `polish_trading_calendar.py` for market day validation
 - **Comprehensive ETL Job Tracking**: Full lifecycle tracking with Airflow context
 - **Data Quality Validation**: Automated OHLC validation and anomaly detection
@@ -329,110 +378,54 @@ Dynamic multi-environment ML training DAGs in `stock_etl/airflow_dags/stock_ml_d
 
 ### Environment Configurations
 ```python
-# ETL DAG Environment configurations
+# ETL DAG Environment configurations with smart detection
 ENVIRONMENTS = {
     'dev': {
         'schema': 'dev_stock_data',
-        'schedule': None,                # Manual triggering
+        'schedule': None,                # Manual triggering with smart detection
         'retries': 1,
         'catchup': False
     },
     'test': {
         'schema': 'test_stock_data',
-        'schedule': None,                # Manual triggering
+        'schedule': None,                # Manual triggering with explicit full_backfill
         'retries': 1,
         'catchup': False
     },
     'prod': {
         'schema': 'prod_stock_data',
-        'schedule': '0 18 * * 1-5',      # 6 PM weekdays
+        'schedule': '0 18 * * 1-5',      # 6 PM weekdays with explicit full_backfill
         'retries': 2,
         'catchup': True
-    }
-}
-
-# ML DAG Environment configurations  
-ML_ENVIRONMENTS = {
-    'dev': {
-        'schema': 'dev_stock_data',
-        'schedule': None,                # Manual triggering
-        'retries': 1,
-        'catchup': False,
-        'description_suffix': 'Development ML training'
-    },
-    'test': {
-        'schema': 'test_stock_data', 
-        'schedule': None,                # Manual triggering
-        'retries': 1,
-        'catchup': False,
-        'description_suffix': 'Test ML training'
-    },
-    'prod': {
-        'schema': 'prod_stock_data',
-        'schedule': '0 18 * * 1-5',      # 6 PM weekdays
-        'retries': 2,
-        'catchup': True,
-        'description_suffix': 'Production ML training'
     }
 }
 ```
 
 ### DAG Task Flow
-1. **check_prerequisites** - Validates trading calendar and execution context
+1. **check_prerequisites** - Validates trading calendar and execution context with smart mode detection
 2. **create_etl_job** - Creates ETL job record with comprehensive metadata
-3. **extract_and_transform** - Data extraction with source tracking
-4. **load_data** - Database loading with detailed per-instrument tracking
+3. **extract_and_transform** - Data extraction with intelligent historical/incremental processing
+4. **load_data** - Database loading with detailed per-instrument tracking and incremental commits
 5. **validate_data_quality** - Automated quality checks (OHLC, gaps, volumes)
 6. **finalize_etl_session** - Job completion with final status and metrics
 
 ### Manual DAG Operations
 ```bash
-# Trigger environment-specific DAGs
-make trigger-dev-dag     # Recommended: via Makefile
-make trigger-test-dag
-make trigger-prod-dag
+# Trigger environment-specific DAGs with smart/explicit modes
+make trigger-dev-dag     # Smart detection (automatically chooses based on database state)
+make trigger-test-dag    # Explicit full_backfill mode (50,000+ records)
+make trigger-prod-dag    # Explicit full_backfill mode (50,000+ records)
 
 # Direct Airflow CLI commands
 docker-compose exec airflow airflow dags trigger dev_stock_etl_pipeline
-docker-compose exec airflow airflow dags trigger test_stock_etl_pipeline
-docker-compose exec airflow airflow dags trigger prod_stock_etl_pipeline
-
-# List DAG runs
-docker-compose exec airflow airflow dags list-runs dev_stock_etl_pipeline
-
-# Check DAG status
-docker-compose exec airflow airflow dags show dev_stock_etl_pipeline
-
-# Monitor task logs
-docker-compose exec airflow airflow tasks logs dev_stock_etl_pipeline extract_and_transform 2025-08-18
-
-# Clear DAG run for retry
-docker-compose exec airflow airflow dags clear dev_stock_etl_pipeline
+docker-compose exec airflow airflow dags trigger test_stock_etl_pipeline --conf '{"extraction_mode": "full_backfill"}'
+docker-compose exec airflow airflow dags trigger prod_stock_etl_pipeline --conf '{"extraction_mode": "full_backfill"}'
 
 # ML DAG Operations (dynamic per-stock-environment DAGs)
 docker-compose exec airflow airflow dags list | grep ml_pipeline   # List all ML DAGs
-docker-compose exec airflow airflow dags trigger ml_pipeline_xtb_dev   # Trigger specific stock ML training (dev)
-docker-compose exec airflow airflow dags trigger ml_pipeline_cdr_test  # Trigger specific stock ML training (test)  
-docker-compose exec airflow airflow dags trigger ml_pipeline_pkn_prod  # Trigger specific stock ML training (prod)
-docker-compose exec airflow airflow tasks logs ml_pipeline_xtb_dev initialize_ml_training_xtb_dev 2025-08-20   # Monitor ML task logs
+docker-compose exec airflow airflow dags trigger test_ml_pipeline_xtb   # Trigger specific stock ML training (test)
+docker-compose exec airflow airflow dags trigger prod_ml_pipeline_xtb   # Trigger specific stock ML training (prod)
 ```
-
-### Current Operational Status (August 2025)
-**✅ VALIDATION COMPLETE**: Dynamic multi-environment DAG system operational
-
-**Recent Test Results:**
-- Development DAG: ✅ Successfully executed (latest run: success)
-- Database Connections: ✅ postgres_default and postgres_stock working
-- Schema Permissions: ✅ dev_stock_data and test_stock_data accessible
-- Trading Calendar Integration: ✅ Polish market calendar validation active
-- ETL Job Tracking: ✅ Comprehensive metadata and lifecycle tracking
-- **NEW**: Multi-Environment ML DAGs: ✅ Implemented and ready for deployment
-
-**DAG Status:**
-- `dev_stock_etl_pipeline`: Active (is_paused = False)
-- `test_stock_etl_pipeline`: Paused (is_paused = True)
-- `prod_stock_etl_pipeline`: Paused (is_paused = True)
-- **ML DAGs**: Dynamically generated per stock-environment combination (e.g., `ml_pipeline_xtb_dev`, `ml_pipeline_cdr_test`)
 
 ### ETL Job Monitoring
 ```bash
@@ -461,7 +454,7 @@ WHERE created_at >= CURRENT_DATE - INTERVAL '7 days'
 - **Supported Markets**: Polish Stock Exchange (WSE)
 
 ### Predefined Symbols
-**Stocks**: XTB, PKN, CCC, LPP, CDR  
+**Stocks**: XTB, PKN, CCC, LPP, CDR, BDX, DVL, ELT, GPW, KTY, PLW, PZU, RBW
 **Indices**: WIG, WIG20, MWIG40, SWIG80
 
 ## Logging and Monitoring
@@ -486,14 +479,15 @@ logger = get_ml_logger(__name__)  # Creates logs/stock_ml/{module_name}.log
 ```
 
 ### ETL Job Tracking
-- All operations tracked in `etl_jobs` table
+- All operations tracked in `etl_jobs` table with smart mode decision logging
 - Detailed metrics: records processed, inserted, failed
 - Integration with Airflow DAG and task IDs
+- Incremental commit architecture for enhanced fault tolerance
 
 ## Testing Approach
 
 ### Test Database
-- Use `stock_data_test` schema for testing
+- Use `test_stock_data` schema for testing
 - Clean initialization without dummy data
 - Isolated from development data
 
@@ -502,6 +496,7 @@ logger = get_ml_logger(__name__)  # Creates logs/stock_ml/{module_name}.log
 - OHLC price relationship validation
 - Database constraints enforce data integrity
 - Hash-based duplicate detection
+- Smart mode execution validation
 
 ## Web Application Architecture (`web-app/`)
 
@@ -545,25 +540,6 @@ The web application provides an intuitive interface for the stock analysis platf
   - `GET /health` - Health check endpoint
   - `GET /test-db` - Database connectivity test
 
-### Database Integration
-- **Production Schema**: Connects directly to `prod_stock_data` schema
-- **Real-time Data**: Live stock prices and historical data (50,000+ records)
-- **ML Integration**: Access to trained models, predictions, and backtesting results
-- **Optimized Queries**: Parameterized SQL with PostgreSQL-specific optimizations
-
-### Key Features
-- **Interactive Dashboard**: Real-time portfolio overview with search and filtering
-- **Advanced Stock Analysis**: Multi-tab interface with comprehensive analysis
-  - Overview: Basic price charts and recent data table
-  - Advanced Analytics: Technical indicators, moving averages, volume analysis
-  - Returns Analysis: Daily returns visualization with statistical summaries
-  - Statistical Analysis: Risk metrics, performance indicators, comprehensive insights
-- **Enhanced Data Visualization**: Professional charts using Recharts library
-- **Smart Error Handling**: Descriptive error messages and missing data indicators
-- **ML Predictions**: Display of trading signals and model confidence scores
-- **Responsive Design**: Mobile-optimized interface with dark/light theme toggle
-- **Watchlist Management**: Personal stock tracking with real-time updates
-
 ### Development Workflow
 ```bash
 # Start complete stack
@@ -584,7 +560,7 @@ cd web-app/frontend && npm start     # Frontend React app (with hot reload)
 
 ### ML Architecture Components
 - **stock_ml.data_extractor**: Multi-stock data extraction from PostgreSQL with quality filtering
-- **stock_ml.feature_engineering**: TA-Lib technical indicators and market features
+- **stock_ml.feature_engineering**: 180+ TA-Lib technical indicators and physics-inspired features
 - **stock_ml.preprocessing**: Data preprocessing with feature selection (no SMOTE - inappropriate for time series)
 - **stock_ml.model_trainer_optimized**: GPU-accelerated XGBoost classification with grid search optimization
 - **stock_ml.backtesting**: Trading strategy backtesting with performance metrics
@@ -594,9 +570,9 @@ cd web-app/frontend && npm start     # Frontend React app (with hot reload)
 - **stock_ml.logging_config**: Centralized logging utility for consistent ML module logging
 
 ### ML Pipeline Flow
-1. **Data Extraction**: Multi-stock data from `test_stock_data` schema with quality filtering
+1. **Data Extraction**: Multi-stock data from schema with quality filtering
 2. **Feature Engineering**: Technical indicators (RSI, MACD, Bollinger Bands, etc.) using TA-Lib
-3. **Target Generation**: Binary classification for stock growth prediction (30-day forward returns)
+3. **Target Generation**: Binary classification for stock growth prediction (7-30 day forward returns)
 4. **Data Preprocessing**: Missing value handling, feature selection, no synthetic balancing
 5. **Model Training**: XGBoost with `scale_pos_weight` parameter for imbalanced data
 6. **Backtesting**: Trading strategy evaluation with risk-adjusted performance metrics
@@ -625,10 +601,10 @@ test_single_stock_pipeline('XTB', include_ml=True)
 
 ### ML Configuration & Features
 
-**Target Variable**: Binary classification for 30-day forward stock growth
+**Target Variable**: Binary classification for 7-30 day forward stock growth
 - Positive class: Stock growth > threshold
 - Uses chronological train/validation/test splits (no data leakage)
-- Class imbalance handled via `class_weight='balanced'` in Random Forest
+- Class imbalance handled via `scale_pos_weight` parameter in XGBoost
 
 **Feature Engineering Pipeline**:
 - **Price Features**: Returns, log returns, volatility measures
@@ -636,61 +612,13 @@ test_single_stock_pipeline('XTB', include_ml=True)
 - **Moving Averages**: Multiple timeframes (5, 10, 20, 50, 200 days)
 - **Volume Features**: Volume ratios, volume moving averages
 - **Market Structure**: Support/resistance levels, trend indicators
+- **Physics-Inspired Features**: Chaos theory, thermodynamics, wave physics (180+ total features)
 
 **Model Architecture**:
 - **Algorithm**: XGBoost Classifier (GPU-accelerated gradient boosting with native NaN handling)
 - **Feature Selection**: Top 25-50 features selected by XGBoost importance
-- **Hyperparameter Tuning**: Grid search with cross-validation
+- **Hyperparameter Tuning**: Grid search with cross-validation (quick/comprehensive modes)
 - **Validation Strategy**: Time-series aware train/validation/test splits
-
-### ML Pipeline Testing & Validation
-
-**Test Execution Results**:
-```bash
-# Expected output structure for successful test
-🧪 Stock ML Pipeline Tests
-==============================================
-🚀 Running Single Stock ML Test (XTB)...
-
-📊 STEP 1: DATA EXTRACTION FOR XTB
-✅ Extracted 1337 records for XTB
-   Date range: 2019-05-23 to 2025-08-19
-
-🔧 STEP 2: FEATURE ENGINEERING FOR XTB  
-✅ Engineered 87 features for XTB
-   Target distribution: Positive 46.2%, Negative 53.8%
-
-📈 STEP 3: DATA SPLITTING FOR XTB
-✅ Train: 802, Val: 267, Test: 268
-
-🔄 STEP 4: PREPROCESSING FOR XTB
-✅ Preprocessing completed for XTB
-   Features: 86 → 25
-   Class imbalance ratio: 1.2:1
-   
-🤖 STEP 5: MODEL TRAINING FOR XTB
-✅ Model training completed for XTB
-   Best CV score: 0.5691
-   Validation ROC-AUC: 0.5734
-   
-📋 STEP 6: TEST EVALUATION FOR XTB
-✅ Test evaluation completed for XTB
-   Test ROC-AUC: 0.5612
-   Test Accuracy: 0.5560
-   Test F1-Score: 0.5455
-
-💰 STEP 7: BACKTESTING FOR XTB
-✅ Backtesting completed for XTB
-   Total return: 12.34%
-   Win rate: 52.17%
-   Total trades: 46
-   Sharpe ratio: 0.445
-
-🎯 FINAL ASSESSMENT FOR XTB
-   Model Quality: ✅ GOOD
-   Trading Quality: ✅ GOOD  
-   Overall: ✅ SUCCESS
-```
 
 ### ML Quality Thresholds
 
@@ -702,7 +630,7 @@ test_single_stock_pipeline('XTB', include_ml=True)
 **Feature Engineering Quality**:
 - **Minimum Records**: 500 trading days per stock
 - **Minimum Years**: 2.0 years of data
-- **Feature Count**: 25-50 selected features (from 80+ engineered)
+- **Feature Count**: 25-50 selected features (from 180+ engineered)
 - **Missing Values**: < 5% after preprocessing
 
 ## Key Design Patterns
@@ -712,18 +640,21 @@ test_single_stock_pipeline('XTB', include_ml=True)
 - Context managers for session management
 - Raw SQL for performance-critical operations
 - Schema-aware search path configuration
+- Incremental commit architecture for enhanced fault tolerance
 
 ### Error Handling
 - Comprehensive logging at all levels
 - Graceful degradation for data extraction failures
 - Retry logic with exponential backoff
 - Detailed error tracking in ETL jobs
+- Smart mode fallback strategies
 
 ### Data Validation
 - Multi-layer validation: Pydantic → Database → Business rules
 - Automatic type conversion and cleaning
 - Price relationship validation (high ≥ open/close ≥ low)
 - Trading date and volume validation
+- UPSERT logic for idempotent operations
 
 ### ML Pipeline Design Patterns
 - **Time Series Awareness**: Chronological splits prevent data leakage
@@ -731,6 +662,7 @@ test_single_stock_pipeline('XTB', include_ml=True)
 - **Class Imbalance**: Uses `scale_pos_weight` parameter in XGBoost instead of SMOTE (inappropriate for time series)
 - **Model Selection**: XGBoost chosen for superior performance on tabular data and native missing value handling
 - **Backtesting Framework**: Walk-forward analysis with realistic trading costs
+- **GPU Acceleration**: Automatic hardware detection and optimization
 
 ### Web Application Design Patterns
 - **Component Architecture**: Modular React components with clear separation of concerns
@@ -748,6 +680,7 @@ test_single_stock_pipeline('XTB', include_ml=True)
 - **Configuration Management**: Environment variables with sensible defaults
 - **Health Monitoring**: Comprehensive health checks and status reporting
 - **Data Preservation vs Clean Restart**: Clear distinction between `docker-restart` (preserves data) and `docker-clean` (deletes data)
+- **Smart Mode Detection**: 4-layer intelligent processing for optimal execution strategy
 
 ## Trading Calendar & DAG Utilities
 
@@ -761,23 +694,14 @@ test_single_stock_pipeline('XTB', include_ml=True)
   - `is_market_open_now()` - Real-time market status
 
 ### DAG Utilities (`dag_utils.py`)
-- **Execution Mode Detection**: Automatically determines backfill vs incremental based on:
+- **4-Layer Execution Mode Detection**: Automatically determines optimal processing strategy based on:
+  - Manual configuration overrides (highest priority)
+  - Database state analysis (0 rows → full_backfill, sparse data → historical, current → incremental)
   - DAG run type (manual, backfill, scheduled)
-  - Execution date age (>7 days = backfill)
-  - Explicit configuration parameters
+  - Safety default (incremental mode)
 - **ETL Logger**: Enhanced logging with file and console handlers for Airflow
 - **Schema Context Management**: Dynamic schema selection from DAG parameters
 - **Date Range Validation**: Prevents accidentally huge backfill operations
-
-### Trading Calendar Logic
-```python
-# Incremental mode: Process previous trading day
-target_date = polish_calendar.get_previous_trading_day(today)
-
-# Backfill mode: Process exact execution date (if trading day)
-if not polish_calendar.is_trading_day(execution_date):
-    # Skip non-trading days or log warning
-```
 
 ## Schema Management
 
@@ -788,18 +712,7 @@ Dynamic schema generation supporting multiple environments:
 - **Environment-Specific Data**: Test schemas exclude dummy data
 - **Comprehensive Schema**: All tables, indexes, functions, and triggers
 - **Performance Optimization**: Automatically creates optimized indexes
-
-### Schema Types and Usage
-```bash
-# Development schema with dummy data
-schema_type: "development" → Includes sample instruments and test data
-
-# Test schema - clean environment  
-schema_type: "test" → Reference data only, no dummy prices
-
-# Production schema
-schema_type: "production" → Production-ready with full constraints
-```
+- **ML Table Integration**: Complete ML pipeline table support
 
 ### Key Schema Features
 - **Normalized Design**: Separate tables for exchanges, instruments, stocks, indices
@@ -807,117 +720,37 @@ schema_type: "production" → Production-ready with full constraints
 - **Data Integrity**: OHLC validation, positive price constraints
 - **Performance Indexes**: Optimized for time-series queries and joins
 - **ETL Tracking**: Complete job lifecycle and data quality metrics
+- **ML Integration**: Seamless storage for models, features, predictions, and backtests
 
-## Recent Multi-Environment ML DAG Validation (August 2025)
+## Production Monitoring & Operations
 
-**✅ PRODUCTION TESTING COMPLETED**: Multi-environment ML pipeline validation successful
-
-### Validation Summary
-
-**Test Results:**
-- **Test Environment**: 10 ML DAGs (`test_ml_pipeline_*`) ✅ Successfully executed  
-- **Production Environment**: 10 ML DAGs (`prod_ml_pipeline_*`) ✅ Successfully executed
-- **Database Schema Separation**: Each environment correctly writes to its target schema
-- **MLDatabaseOperations Enhancement**: Fixed `target_schema` parameter handling for multi-environment support
-
-### Key Technical Improvements
-
-**Grid Search Performance Optimization:**
-- **Quick Mode**: 192 parameter combinations (2-3 minutes per stock)
-- **Comprehensive Mode**: 12,800 parameter combinations (30-60 minutes per stock)  
-- **Development Efficiency**: 66x faster testing cycles with 'quick' mode
-- **Production Flexibility**: Can switch between modes based on environment needs
-
-**Multi-Environment Architecture Benefits:**
-- **Environment Isolation**: Complete separation of dev/test/prod ML models and data
-- **Parallel Development**: Teams can train models in test while prod runs independently
-- **Safe Deployment**: Test validated models before promoting to production
-- **Resource Efficiency**: 2-core CPU limit enables 10+ concurrent DAGs per environment
-
-### Multi-Environment ML Commands
-
-```bash
-# Test environment ML DAGs (validated ✅)
-make trigger-test-ml-dags        # Trigger all 10 test ML DAGs
-
-# Production environment ML DAGs (validated ✅)
-make trigger-prod-ml-dags        # Trigger all 10 production ML DAGs
-
-# Monitor multi-environment ML progress
-docker-compose exec postgres psql -U postgres -d stock_data -c "
--- Test environment models
-SET search_path TO test_stock_data;
-SELECT 'TEST' as env, COUNT(*) as models, ROUND(AVG(test_roc_auc), 4) as avg_roc_auc FROM ml_models;
-
--- Production environment models
-SET search_path TO prod_stock_data;
-SELECT 'PROD' as env, COUNT(*) as models, ROUND(AVG(test_roc_auc), 4) as avg_roc_auc FROM ml_models;
-"
-
-# Individual ML DAG execution by environment
-docker-compose exec airflow airflow dags trigger test_ml_pipeline_xtb   # Test environment
-docker-compose exec airflow airflow dags trigger prod_ml_pipeline_xtb   # Production environment
-```
-
-## Infrastructure & Operations Assessment (August 2025)
-
-### Project Status Analysis
-**Current State**: Complete ETL pipeline with integrated multi-environment ML capabilities (100% complete, validated production deployment)
-
-**Key Achievements:**
-- ✅ Complete PostgreSQL 17 + Airflow 3.0.4 containerized infrastructure
-- ✅ Database separation architecture (airflow_metadata vs stock_data databases)
-- ✅ Unified Jinja2 schema template system for multi-environment deployment
-- ✅ Production validation with 58,470+ real market records (100% success rate)
-- ✅ Dynamic multi-environment Airflow DAGs with trading calendar integration
-- ✅ Automated credential management and service orchestration via Makefile
-- ✅ Complete ML pipeline with TA-Lib technical indicators and GPU-accelerated XGBoost classification
-- ✅ Comprehensive backtesting framework with risk-adjusted performance metrics
-- ✅ **✅ VALIDATED**: Multi-environment ML DAG architecture with successful test and prod deployment
-- ✅ **✅ ENHANCED**: MLDatabaseOperations with target_schema support for environment-agnostic operation
-- ✅ **✅ OPTIMIZED**: Grid search performance (66x faster testing cycles with quick mode)
-
-### Project Enhancement Opportunities
-All core functionality is complete. Future enhancements could include:
-
-1. **Advanced ML Models**: LSTM/GRU for time series, ensemble methods, feature selection optimization
-2. **Real-time Processing**: Streaming data pipeline for intraday trading signals
-3. **Portfolio Optimization**: Multi-asset allocation strategies and risk management
-4. **Advanced Backtesting**: Transaction costs, slippage modeling, walk-forward analysis
-5. **Production Monitoring**: Health check endpoints, alerting framework, performance dashboards
-6. **Additional Markets**: Integration with other exchanges and data providers
-
-### Current Monitoring Capabilities
-**Already Implemented:**
-- ETL job lifecycle tracking in `etl_jobs` table with detailed metrics
-- Data quality validation pipeline with `data_quality_metrics` storage
-- Comprehensive structured logging via `structlog` with JSON output
-- Airflow DAG monitoring with task-level success/failure tracking
-- Database constraint validation and OHLC price relationship checks
-
-**Production Monitoring Queries Available:**
+### ETL Job Performance Monitoring
 ```sql
--- ETL job performance monitoring
-SELECT job_name, status, records_processed, duration_seconds, started_at 
+-- Recent ETL jobs with smart mode decisions
+SELECT job_name, status, records_processed, duration_seconds, started_at,
+       metadata->>'execution_config'->>'reason' as execution_reason
 FROM etl_jobs 
 ORDER BY started_at DESC LIMIT 10;
 
--- Data quality issue detection
-SELECT instrument_id, metric_name, is_valid, severity 
-FROM data_quality_metrics 
-WHERE created_at >= CURRENT_DATE - INTERVAL '7 days' 
-  AND is_valid = FALSE;
-
--- Pipeline health check
+-- Smart mode effectiveness analysis
 SELECT 
-    COUNT(*) as total_jobs,
-    COUNT(CASE WHEN status = 'completed' THEN 1 END) as successful_jobs,
-    COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed_jobs,
-    ROUND(AVG(duration_seconds), 2) as avg_duration_seconds
+    CASE 
+        WHEN metadata->>'execution_config'->>'reason' LIKE '%0 records%' THEN 'Auto Full Backfill'
+        WHEN metadata->>'execution_config'->>'reason' LIKE '%stale%' THEN 'Auto Historical'
+        WHEN metadata->>'execution_config'->>'reason' LIKE '%current%' THEN 'Auto Incremental'
+        ELSE 'Manual Override'
+    END as mode_type,
+    COUNT(*) as job_count,
+    ROUND(AVG(records_processed), 0) as avg_records,
+    ROUND(AVG(duration_seconds), 2) as avg_duration
 FROM etl_jobs 
-WHERE started_at >= CURRENT_DATE - INTERVAL '30 days';
+WHERE started_at >= CURRENT_DATE - INTERVAL '30 days'
+GROUP BY mode_type;
+```
 
--- ML model performance monitoring
+### ML Model Performance Monitoring
+```sql
+-- ML model performance across environments
 SELECT 
     m.model_version,
     bi.symbol,
@@ -931,69 +764,36 @@ FROM ml_models m
 JOIN base_instruments bi ON m.instrument_id = bi.id
 LEFT JOIN ml_backtest_results br ON m.id = br.model_id
 ORDER BY m.created_at DESC LIMIT 10;
-
--- ML feature data quality check
-SELECT 
-    COUNT(*) as total_features,
-    COUNT(CASE WHEN feature_completeness > 0.95 THEN 1 END) as high_quality_features,
-    ROUND(AVG(feature_completeness), 3) as avg_completeness,
-    ROUND(AVG(data_quality_score), 3) as avg_quality_score
-FROM ml_feature_data 
-WHERE created_at >= CURRENT_DATE - INTERVAL '7 days';
 ```
 
-### Infrastructure Readiness Assessment
-**Production Capabilities:**
-- **Database Architecture**: Expert A's separation approach provides optimal scalability
-- **Container Orchestration**: Full Docker Compose stack with health checks
-- **Schema Management**: Template-based deployment supports dev/test/prod environments  
-- **Data Processing**: Validated pipeline handles thousands of records reliably
-- **Calendar Integration**: WSE trading calendar prevents weekend/holiday execution
-- **Error Recovery**: Comprehensive retry logic and graceful failure handling
+## Recent Enhancements (August 2025)
 
-**Deployment Architecture:**
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Airflow UI    │    │  ETL Pipeline   │    │  PostgreSQL 17  │
-│   (Port 8080)   │    │   (Python)      │    │   (Port 5432)   │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
-         │                       │                       │
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│    pgAdmin      │    │   Docker        │    │  Automated      │
-│   (Port 5050)   │    │   Compose       │    │  Credentials    │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-```
+### Smart Mode Detection
+- **4-layer intelligent processing** automatically chooses optimal execution strategy
+- **Automatic full_backfill** for fresh deployments (0 rows detected)
+- **Database state analysis** prevents manual intervention for new environments
+- **Idempotent operations** ensure safe re-execution without duplicates
 
-### Technical Foundation Strengths
-1. **Normalized Database Design**: Properly designed 3NF/BCNF schema supports complex financial data
-2. **Type Safety**: Pydantic models provide runtime validation and IDE support  
-3. **Performance Optimization**: Strategic indexing and connection pooling for scalability
-4. **Data Integrity**: Multi-layer validation prevents corrupt data entry
-5. **Extensibility**: Clean architecture allows easy addition of new markets/instruments
-6. **Maintainability**: Comprehensive logging and error tracking for debugging
+### ML Pipeline Improvements
+- **GPU-accelerated XGBoost** with automatic hardware detection
+- **Multi-environment ML DAGs** with schema separation (test/prod)
+- **180+ physics-inspired features** including chaos theory and thermodynamics
+- **Grid search optimization** with quick (192 params) vs comprehensive (12,800 params) modes
 
-### ML Pipeline Capabilities (Newly Implemented)
-**Feature Engineering**:
-- 80+ technical indicators via TA-Lib integration
-- Multi-timeframe moving averages and volatility measures
-- Price momentum and mean reversion signals
-- Volume-based indicators and market microstructure features
+### Web Application Integration
+- **Production-ready React dashboard** with real-time stock data
+- **Advanced charting** with technical indicators and statistical analysis
+- **Complete API framework** with 10 comprehensive test cases
+- **Docker integration** with main infrastructure deployment
 
-**Model Training & Evaluation**:
-- XGBoost classification with GPU acceleration and hyperparameter tuning
-- Time-series aware train/validation/test splits
-- Feature selection via XGBoost native importance scoring
-- Class imbalance handling with `scale_pos_weight` parameter
+### Infrastructure Enhancements
+- **Incremental commit architecture** for enhanced fault tolerance
+- **Enhanced duplicate prevention** with validation across multiple runs
+- **Automated credential management** with service orchestration
+- **Complete Docker integration** for web application deployment
 
-**Backtesting & Performance**:
-- Trading strategy simulation with realistic transaction costs
-- Risk-adjusted performance metrics (Sharpe ratio, win rate, drawdown)
-- Walk-forward analysis for temporal validation
-- Comprehensive performance reporting and visualization
-
-**Testing & Validation**:
-- Comprehensive test suite in `stock_ml/test_pipeline.py`
-- Multi-stock testing capabilities
-- Interactive mode for custom stock analysis
-- Quality thresholds and automated assessment
+# important-instruction-reminders
+Do what has been asked; nothing more, nothing less.
+NEVER create files unless they're absolutely necessary for achieving your goal.
+ALWAYS prefer editing an existing file to creating a new one.
+NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.

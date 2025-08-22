@@ -1116,7 +1116,7 @@ def determine_extraction_strategy(symbol: str, instrument_type: str, target_sche
                     
                     # Decision logic based on database state
                     if record_count == 0:
-                        return 'historical', f'New instrument: no existing data for {symbol}', 1000
+                        return 'historical', f'New instrument: no existing data for {symbol}', -1  # -1 = unlimited backfill
                     
                     if is_stale:
                         days_stale = (datetime.now().date() - latest_date).days if latest_date else 999
@@ -1124,7 +1124,7 @@ def determine_extraction_strategy(symbol: str, instrument_type: str, target_sche
                     
                     # Check for significant data gaps (more than 30 days)
                     if latest_date and record_count < 30:  # Less than a month of data
-                        return 'historical', f'Sparse data: only {record_count} records for {symbol}', 1000
+                        return 'historical', f'Sparse data: only {record_count} records for {symbol}', -1  # -1 = unlimited backfill
                     
                     # Data looks current - incremental update
                     return 'incremental', f'Current data: {symbol} last updated {latest_date}', 1
@@ -1136,7 +1136,7 @@ def determine_extraction_strategy(symbol: str, instrument_type: str, target_sche
     # Layer 3: DAG execution mode fallback
     mode, config = determine_execution_mode(context)
     if mode == 'backfill':
-        return 'historical', f'Backfill execution mode detected', 1000
+        return 'historical', f'Backfill execution mode detected', -1  # -1 = unlimited backfill
     
     # Layer 4: Default to incremental for safety
     return 'incremental', f'Default incremental mode for {symbol}', 1
