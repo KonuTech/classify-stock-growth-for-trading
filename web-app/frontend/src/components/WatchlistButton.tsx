@@ -1,7 +1,7 @@
 import React from 'react';
 import { HeartIcon } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartSolidIcon } from '@heroicons/react/24/solid';
-import { useWatchlist } from '../hooks/useWatchlist';
+import { useWatchlist } from '../contexts/WatchlistContext';
 
 interface WatchlistButtonProps {
   stock: {
@@ -36,9 +36,9 @@ export default function WatchlistButton({ stock, className = '' }: WatchlistButt
       title={inWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
     >
       {inWatchlist ? (
-        <HeartSolidIcon className="h-5 w-5" />
+        <HeartSolidIcon className="h-6 w-6" />
       ) : (
-        <HeartIcon className="h-5 w-5" />
+        <HeartIcon className="h-6 w-6" />
       )}
     </button>
   );

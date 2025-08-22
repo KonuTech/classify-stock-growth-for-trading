@@ -5,3 +5,5 @@
 2025-08-22 12:22:55,795 - prerequisite_check - INFO - check_execution_prerequisites:202 - Prerequisites passed - proceeding with backfill mode
 2025-08-22 12:22:57,950 - prerequisite_check - INFO - check_execution_prerequisites:202 - Prerequisites passed - proceeding with backfill mode
 2025-08-22 12:23:17,839 - prerequisite_check - INFO - check_execution_prerequisites:202 - Prerequisites passed - proceeding with backfill mode
+2025-08-22 18:00:01,853 - prerequisite_check - INFO - check_execution_prerequisites:202 - Prerequisites passed - proceeding with incremental mode
+2025-08-22 18:36:15,850 - prerequisite_check - INFO - check_execution_prerequisites:202 - Prerequisites passed - proceeding with backfill mode

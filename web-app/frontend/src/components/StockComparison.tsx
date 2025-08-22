@@ -4,6 +4,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { useStockData } from '../hooks/useStockData';
 import Card from './ui/Card';
 import Button from './ui/Button';
+import { useDrag } from '../hooks/useDrag';
 
 interface StockComparisonProps {
   initialStocks?: string[];
@@ -23,6 +24,9 @@ export default function StockComparison({ initialStocks = [], onClose }: StockCo
   const [timeframe, setTimeframe] = useState<'1M' | '3M' | '6M' | '1Y' | 'MAX'>('1Y');
   const [availableStocks, setAvailableStocks] = useState<Stock[]>([]);
   const [loadingStocks, setLoadingStocks] = useState(true);
+
+  // Drag functionality
+  const { dragRef, handleRef, dragProps, handleProps } = useDrag();
 
   // Fetch available stocks from real API
   useEffect(() => {
@@ -205,13 +209,34 @@ export default function StockComparison({ initialStocks = [], onClose }: StockCo
   const hasError = stockDataHooks.some(hook => hook.error);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg max-w-6xl w-full max-h-[95vh] overflow-y-auto">
-        {/* Header */}
-        <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-            📈 Stock Comparison Analysis
-          </h2>
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50">
+      <div 
+        ref={dragRef}
+        {...dragProps}
+        className="bg-white dark:bg-gray-800 rounded-lg max-w-6xl w-full max-h-[95vh] overflow-y-auto shadow-2xl"
+        style={{
+          ...dragProps.style,
+          width: '95%',
+          maxWidth: '1200px',
+          transform: dragProps.style.left === 0 && dragProps.style.top === 0 ? 'translate(-50%, -50%)' : 'none',
+          left: dragProps.style.left === 0 ? '50%' : dragProps.style.left,
+          top: dragProps.style.top === 0 ? '50%' : dragProps.style.top,
+        }}
+      >
+        {/* Header - Drag Handle */}
+        <div 
+          ref={handleRef}
+          {...handleProps}
+          className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700 select-none"
+        >
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+              📈 Stock Comparison Analysis
+            </h2>
+            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              🖱️ Drag to move
+            </div>
+          </div>
           <Button variant="ghost" onClick={onClose}>
             <XMarkIcon className="h-6 w-6" />
           </Button>

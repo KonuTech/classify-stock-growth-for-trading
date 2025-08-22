@@ -5,6 +5,7 @@ import ChartTabs from './ChartTabs';
 import AdvancedPriceChart from './charts/AdvancedPriceChart';
 import ReturnsChart from './charts/ReturnsChart';
 import StatisticsChart from './charts/StatisticsChart';
+import { useDrag } from '../hooks/useDrag';
 
 interface StockDetailProps {
   symbol: string;
@@ -57,6 +58,9 @@ export default function StockDetail({ symbol, onClose }: StockDetailProps) {
   const [error, setError] = useState<string | null>(null);
   const [timeframe, setTimeframe] = useState<'1M' | '3M' | '6M' | '1Y' | 'MAX'>('1Y');
   const [activeTab, setActiveTab] = useState<string>('overview');
+
+  // Drag functionality
+  const { dragRef, handleRef, dragProps, handleProps } = useDrag();
 
   // Tab options - moved here to be available for useEffect
   const tabOptions = [
@@ -202,14 +206,31 @@ export default function StockDetail({ symbol, onClose }: StockDetailProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50">
+      <div 
+        ref={dragRef}
+        {...dragProps}
+        className="bg-white dark:bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+        style={{
+          ...dragProps.style,
+          width: '90%',
+          maxWidth: '1000px',
+          transform: dragProps.style.left === 0 && dragProps.style.top === 0 ? 'translate(-50%, -50%)' : 'none',
+          left: dragProps.style.left === 0 ? '50%' : dragProps.style.left,
+          top: dragProps.style.top === 0 ? '50%' : dragProps.style.top,
+        }}
+      >
+        {/* Header - Drag Handle */}
+        <div 
+          ref={handleRef}
+          {...handleProps}
+          className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700 select-none"
+        >
           <div>
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{stockData.symbol}</h2>
             <p className="text-gray-600 dark:text-gray-300">{cleanStockName(stockData.name)}</p>
             <div className="flex space-x-4 text-xs text-gray-500 dark:text-gray-400 mt-1">
+              <span>🖱️ Drag to move</span>
               <span>⌨️ TAB: Next tab</span>
               <span>ESC: Close</span>
             </div>

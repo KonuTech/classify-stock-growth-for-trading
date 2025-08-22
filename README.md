@@ -12,7 +12,7 @@
 ![Docker](https://img.shields.io/badge/Docker-Containerized-blue)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
-A comprehensive **AI-powered stock analysis platform** that combines ETL data processing, GPU-accelerated machine learning, and an interactive web application with high-performance Redis caching. Features production-ready data pipelines for Polish Stock Exchange (WSE), XGBoost-based stock growth prediction models with 180+ technical indicators, and a modern React dashboard with sub-second API responses for real-time analysis and visualization.
+A comprehensive **AI-powered stock analysis platform** that combines ETL data processing, GPU-accelerated machine learning, and an interactive web application with high-performance Redis caching. Features production-ready data pipelines for Polish Stock Exchange (WSE), XGBoost-based stock growth prediction models with 180+ technical indicators, and a modern React dashboard with sub-second API responses and automatic cache invalidation for real-time analysis and visualization.
 
 > **📚 Developer Resources**: For detailed technical documentation, architecture decisions, and development guidance, see **[CLAUDE.md](CLAUDE.md)**. This file contains comprehensive information about the codebase structure, essential commands, database design patterns, Airflow DAG configuration, and trading calendar integration.
 
@@ -55,6 +55,7 @@ This platform provides a complete end-to-end solution for AI-powered stock marke
 │  │                 │    │       ↕         │    │                 ││
 │  │                 │    │   Redis Cache   │    │                 ││
 │  │                 │    │ 183x Faster API │    │                 ││
+│  │                 │    │ Auto-Invalidate │    │                 ││
 │  └─────────────────┘    └─────────────────┘    └─────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
                                 │
@@ -93,7 +94,7 @@ This platform provides a complete end-to-end solution for AI-powered stock marke
 📈 **Professional Charting**: Interactive charts with moving averages, volume analysis, returns visualization, risk metrics  
 🔄 **Multi-Environment**: Separate dev/test/prod pipelines with independent ML training and database schemas  
 ⚡ **Real-Time Processing**: Live stock price updates, instant ML predictions, interactive data visualization  
-🗄️ **High-Performance Caching**: Redis 7 with 183x faster API responses and intelligent TTL management  
+🗄️ **High-Performance Caching**: Redis 7 with 183x faster API responses, intelligent TTL management, and ETL-triggered automatic cache invalidation  
 🛡️ **Enterprise-Grade**: Docker containerization, comprehensive logging, data quality validation, error recovery  
 🎨 **Smart UX**: Descriptive error handling, missing data indicators, responsive design, dark/light themes
 
@@ -614,7 +615,25 @@ time curl -s http://localhost:3001/api/stocks?timeframe=1Y > /dev/null  # Second
 # Cache Miss: ~350ms (database query + computation)
 # Cache Hit: ~2ms (Redis retrieval) - 183x faster!
 
-# 13. Cache Management Testing
+# 13. ETL Webhook Testing (Cache Invalidation)
+curl -s -X POST http://localhost:3001/api/etl/data-loaded \
+  -H "Content-Type: application/json" \
+  -d '{
+    "symbols": ["XTB", "PKN", "CCC"],
+    "trading_date": "2025-01-22",
+    "records_count": 3
+  }'
+# Expected Result: 
+# {
+#   "status":"OK",
+#   "message":"Cache invalidated for new data on 2025-01-22",
+#   "symbols_processed":3,
+#   "records_count":3,
+#   "timeframes_invalidated":["MAX","1M","3M","6M","1Y"],
+#   "timestamp":"2025-08-22T21:32:57.286Z"
+# }
+
+# 14. Manual Cache Management Testing
 curl -s -X DELETE http://localhost:3001/api/cache/1Y  # Clear 1Y timeframe cache
 # Expected Result: {"status":"OK","message":"Cache invalidated for timeframe: 1Y"}
 
@@ -1178,41 +1197,70 @@ A **production-ready React web application** has been integrated to provide intu
 - **🗄️ Redis Caching Layer**: High-performance caching with 183x faster API responses
 - **🛡️ Security Features**: CORS enabled, parameterized queries, SQL injection protection
 - **📡 RESTful API Endpoints**:
-  - `GET /api/stocks` - List all stocks with metadata (cached 1-2hr TTL)
-  - `GET /api/stocks/:symbol` - Detailed stock data with price history
-  - `GET /api/stocks/:symbol/analytics` - Advanced analytics with technical indicators (cached 1-2hr TTL)
+  - `GET /api/stocks` - List all stocks with metadata (cached with intelligent TTL)
+  - `GET /api/stocks/:symbol` - Detailed stock data with price history (cached)
+  - `GET /api/stocks/:symbol/analytics` - Advanced analytics with technical indicators (cached)
   - `GET /api/predictions/:symbol` - ML predictions and trading signals
   - `GET /api/models` - ML model performance metrics
-  - `GET /api/cache/status` - Redis cache status and statistics
-  - `DELETE /api/cache/:timeframe` - Cache invalidation management
+  - `GET /api/cache/status` - Redis cache status, statistics, and memory usage
+  - `DELETE /api/cache/:timeframe` - Manual cache invalidation by timeframe
+  - `DELETE /api/cache` - Clear all cached data
+  - `POST /api/etl/data-loaded` - ETL webhook for automatic cache invalidation
 - **⚡ Environment Configuration**: Docker-compose integration with automatic database discovery
 - **📈 Real-time Data**: Live stock prices and trading volumes with intelligent caching
 
 ### 🗄️ Redis Caching Layer (High-Performance Enhancement)
 
-**Redis 7 Alpine** provides intelligent caching for dramatically improved API performance:
+**Redis 7 Alpine** provides intelligent caching with automatic cache invalidation for dramatically improved API performance:
 
 #### **Cache Architecture & Performance**
 - **Cache Strategy**: Smart TTL based on data volatility
   - **1M/3M timeframes**: 1 hour (high-frequency updates)
   - **6M/1Y timeframes**: 2 hours (medium-frequency updates)
-  - **MAX timeframe**: 24 hours (historical data)
+  - **MAX timeframe**: Dynamic TTL until next market close + 1 hour buffer
 - **Performance Gains**: 
   - **Stock Lists**: 359ms → 2ms (**183x faster**)
   - **Analytics**: 21ms → 3ms (**7x faster**)
   - **Cache Hit Rate**: 95%+ for frequently accessed endpoints
 
+#### **🚀 Automatic Cache Invalidation (ETL-Triggered)**
+- **ETL Webhook Integration**: `/api/etl/data-loaded` endpoint automatically invalidates cache when new daily data is loaded
+- **Intelligent Invalidation Strategy**:
+  - **MAX timeframe**: Always invalidated (contains all historical data)
+  - **Recent timeframes**: 1M, 3M, 6M, 1Y invalidated if new trading day affects the period
+  - **Selective Clearing**: Only invalidates caches that could contain the new data
+- **Real-time Freshness**: Ensures users always see the latest data without manual cache management
+
 #### **Cache Management Features**
-- **Intelligent Invalidation**: Pattern-based cache clearing by timeframe
-- **Memory Optimization**: LRU eviction with 256MB limit
-- **Health Monitoring**: Real-time cache statistics and connection status
+- **ETL-Triggered Invalidation**: Automatic cache refresh when new market data is loaded
+- **Pattern-Based Clearing**: Intelligent cache clearing by timeframe and data type
+- **Memory Optimization**: LRU eviction with 256MB limit and automatic cleanup
+- **Health Monitoring**: Real-time cache statistics, connection status, and performance metrics
 - **Graceful Degradation**: Automatic fallback to database when Redis unavailable
 
 #### **Cache Key Strategy**
 ```
-stock_list:{timeframe}           # Cached stock listings
-stock_stats:{symbol}:{timeframe} # Individual stock analytics
-cache_timestamp:{timeframe}      # Freshness validation
+stock_list:{timeframe}           # Cached stock listings with statistics
+stock_stats:{symbol}:{timeframe} # Individual stock analytics and technical indicators
+stock_detail:{symbol}:{timeframe} # Stock details with price history
+cache_timestamp:{timeframe}      # Freshness validation timestamps
+```
+
+#### **ETL Integration Commands**
+```bash
+# Trigger ETL webhook for cache invalidation (normally called by ETL pipeline)
+curl -X POST http://localhost:3001/api/etl/data-loaded \
+  -H "Content-Type: application/json" \
+  -d '{
+    "symbols": ["XTB", "PKN", "CCC"],
+    "trading_date": "2025-01-22",
+    "records_count": 3
+  }'
+
+# Manual cache management
+curl -X DELETE http://localhost:3001/api/cache/1Y    # Clear specific timeframe
+curl -X DELETE http://localhost:3001/api/cache      # Clear all cached data
+curl http://localhost:3001/api/cache/status         # Check cache status and performance
 ```
 
 ### 🎯 Web Application Status: **FULLY INTEGRATED & OPERATIONAL**
@@ -2223,6 +2271,26 @@ backoff_factor = 2           # Exponential backoff
 - **Database Write Performance**: All ML artifacts successfully stored with multi-environment schema validation  
 - **Environment Isolation**: Zero conflicts between test and prod ML artifact storage  
 - **System Stability**: Zero downtime during concurrent multi-environment ML training sessions
+
+## 🔄 Latest Enhancements (August 2025)
+
+### 🚀 ETL-Triggered Cache Invalidation System
+- **Automatic Cache Refresh**: ETL webhook at `/api/etl/data-loaded` automatically invalidates relevant caches when new daily data is loaded
+- **Intelligent Invalidation**: Selective cache clearing based on trading date and affected timeframes
+- **Zero Manual Intervention**: Cache stays fresh automatically without manual cache management
+- **Real-time Consistency**: Users always see the latest market data immediately after ETL completion
+
+### 🎨 Enhanced User Interface
+- **Clean Stock Display**: Streamlined stock list with 3-letter symbol circles and removed redundant text
+- **Improved Typography**: Consistent "PLN" currency display and 1-decimal percentage precision
+- **Better UX**: Repositioned watchlist hearts, cleaner price ranges, and optimized visual hierarchy
+- **Error-Safe Components**: Robust price formatting functions that handle mixed data types gracefully
+
+### ⚡ Performance & Reliability Improvements
+- **Dynamic TTL Management**: MAX timeframe cache with intelligent TTL until next market close
+- **Enhanced Error Handling**: Function hoisting fixes and proper initialization order
+- **Component Optimization**: Stock name cleaning utilities and consistent formatting patterns
+- **Production Stability**: All components tested and validated for production readiness
 
 ---
 

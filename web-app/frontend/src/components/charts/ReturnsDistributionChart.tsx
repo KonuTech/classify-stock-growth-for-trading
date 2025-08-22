@@ -160,13 +160,13 @@ export default function ReturnsDistributionChart({
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600 dark:text-gray-400 mt-2">
           <div>
-            <span className="font-medium">Mean:</span> {stats.mean.toFixed(3)}%
+            <span className="font-medium">Mean:</span> {stats.mean.toFixed(1)}%
           </div>
           <div>
-            <span className="font-medium">Std Dev:</span> {stats.stdDev.toFixed(3)}%
+            <span className="font-medium">Std Dev:</span> {stats.stdDev.toFixed(1)}%
           </div>
           <div>
-            <span className="font-medium">Skewness:</span> {stats.skewness.toFixed(2)}
+            <span className="font-medium">Skewness:</span> {stats.skewness.toFixed(1)}
           </div>
           <div>
             <span className="font-medium">Win Rate:</span> {winRate.toFixed(1)}%
@@ -198,7 +198,7 @@ export default function ReturnsDistributionChart({
           />
           <YAxis 
             label={{ value: 'Frequency (%)', angle: -90, position: 'insideLeft' }}
-            tickFormatter={(value) => `${value.toFixed(1)}%`}
+            tickFormatter={(value) => `${Math.round(value)}%`}
             stroke="#6B7280"
             fontSize={12}
           />
@@ -209,7 +209,7 @@ export default function ReturnsDistributionChart({
             stroke="#ef4444" 
             strokeWidth={2} 
             strokeDasharray="5 5"
-            label={{ value: `Mean: ${stats.mean.toFixed(3)}%`, position: "top" }}
+            label={{ value: `Mean: ${stats.mean.toFixed(1)}%`, position: "top" }}
           />
           
           {/* Reference line at zero */}
@@ -239,7 +239,7 @@ export default function ReturnsDistributionChart({
       
       <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
         Bell curve showing distribution of {stats.count} daily returns. 
-        Red dashed line indicates mean return ({stats.mean.toFixed(3)}%).
+        Red dashed line indicates mean return ({stats.mean.toFixed(1)}%).
         {stats.skewness > 0.5 && " Distribution is right-skewed (positive tail)."}
         {stats.skewness < -0.5 && " Distribution is left-skewed (negative tail)."}
         {Math.abs(stats.skewness) <= 0.5 && " Distribution is approximately symmetric."}

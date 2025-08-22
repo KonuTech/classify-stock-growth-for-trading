@@ -52,7 +52,7 @@ help:
 	@echo "  make web-clean          - Clean web application containers and images"
 	@echo ""
 	@echo "    💡 Web Examples:"
-	@echo "      make web MODE=restart QUICK=true     # Quick restart (fastest)"
+	@echo "      make web MODE=restart QUICK=true     # Quick restart (fastest) - for Redis, Backend, Frontend only"
 	@echo "      make web MODE=restart REBUILD=true   # Restart with rebuild"
 	@echo "      make web MODE=restart COMPONENT=frontend # Restart only frontend"
 	@echo "      make web-status DETAIL=health        # Comprehensive health check"

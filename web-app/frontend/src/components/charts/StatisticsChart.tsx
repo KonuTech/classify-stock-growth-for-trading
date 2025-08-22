@@ -92,24 +92,22 @@ export default function StatisticsChart({ data, symbol }: StatisticsChartProps) 
     return maxDrawdown;
   };
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('pl-PL', {
-      style: 'currency',
-      currency: 'PLN',
-      minimumFractionDigits: 2
-    }).format(price);
+  const formatPrice = (price: number | string) => {
+    const numPrice = typeof price === 'string' ? parseFloat(price) : price;
+    if (isNaN(numPrice)) return 'N/A';
+    return `${Math.round(numPrice)} PLN`;
   };
 
   const formatVolume = (volume: number) => {
     if (volume >= 1000000) {
-      return `${(volume / 1000000).toFixed(1)}M`;
+      return `${Math.round(volume / 1000000)}M`;
     } else if (volume >= 1000) {
-      return `${(volume / 1000).toFixed(1)}K`;
+      return `${Math.round(volume / 1000)}K`;
     }
     return volume.toString();
   };
 
-  const formatPercent = (value: number) => `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+  const formatPercent = (value: number) => `${value >= 0 ? '+' : ''}${Math.round(value)}%`;
 
   const stats = calculateStatistics();
 
@@ -152,7 +150,7 @@ export default function StatisticsChart({ data, symbol }: StatisticsChartProps) 
     {
       title: 'Risk Metrics',
       stats: [
-        { label: 'Sharpe Ratio', value: stats.sharpeRatio.toFixed(3), color: stats.sharpeRatio > 1 ? 'text-green-600 dark:text-green-400' : stats.sharpeRatio > 0 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400' },
+        { label: 'Sharpe Ratio', value: stats.sharpeRatio.toFixed(1), color: stats.sharpeRatio > 1 ? 'text-green-600 dark:text-green-400' : stats.sharpeRatio > 0 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400' },
         { label: 'Annualized Return', value: formatPercent(stats.avgReturn * 252) },
         { label: 'Annualized Volatility', value: formatPercent(stats.returnStdDev * Math.sqrt(252)) },
         { label: 'Total Records', value: stats.totalDays.toString() }

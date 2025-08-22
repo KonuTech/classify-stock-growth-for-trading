@@ -86,7 +86,7 @@ export default function ReturnsChart({
             {new Date(label).toLocaleDateString('pl-PL')}
           </p>
           <p className={`text-sm ${returnValue >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-            Daily Return: {returnValue >= 0 ? '+' : ''}{returnValue.toFixed(2)}%
+            Daily Return: {returnValue >= 0 ? '+' : ''}{returnValue.toFixed(1)}%
           </p>
         </div>
       );
@@ -111,7 +111,7 @@ export default function ReturnsChart({
             {symbol} {title} Timeline
           </h3>
           <div className="flex space-x-4 text-sm text-gray-600 dark:text-gray-400 mt-1">
-            <span>Avg: {avgReturn.toFixed(3)}%</span>
+            <span>Avg: {avgReturn.toFixed(1)}%</span>
             <span>Win Rate: {winRate.toFixed(1)}%</span>
             <span>Days: {totalReturns}</span>
           </div>
@@ -127,7 +127,7 @@ export default function ReturnsChart({
               fontSize={12}
             />
             <YAxis 
-              tickFormatter={(value) => `${value.toFixed(1)}%`}
+              tickFormatter={(value) => `${Math.round(value)}%`}
               stroke="#6B7280"
               fontSize={12}
             />

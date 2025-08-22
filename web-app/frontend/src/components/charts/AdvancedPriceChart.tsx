@@ -65,19 +65,17 @@ export default function AdvancedPriceChart({
     });
   };
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('pl-PL', {
-      style: 'currency',
-      currency: 'PLN',
-      minimumFractionDigits: 2
-    }).format(price);
+  const formatPrice = (price: number | string) => {
+    const numPrice = typeof price === 'string' ? parseFloat(price) : price;
+    if (isNaN(numPrice)) return 'N/A';
+    return `${Math.round(numPrice)} PLN`;
   };
 
   const formatVolume = (volume: number) => {
     if (volume >= 1000000) {
-      return `${(volume / 1000000).toFixed(1)}M`;
+      return `${Math.round(volume / 1000000)}M`;
     } else if (volume >= 1000) {
-      return `${(volume / 1000).toFixed(1)}K`;
+      return `${Math.round(volume / 1000)}K`;
     }
     return volume.toString();
   };
@@ -113,7 +111,7 @@ export default function AdvancedPriceChart({
             )}
             {data.daily_return && typeof data.daily_return === 'number' && (
               <p className={`${data.daily_return >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                Daily Return: {data.daily_return >= 0 ? '+' : ''}{data.daily_return.toFixed(2)}%
+                Daily Return: {data.daily_return >= 0 ? '+' : ''}{data.daily_return.toFixed(1)}%
               </p>
             )}
           </div>

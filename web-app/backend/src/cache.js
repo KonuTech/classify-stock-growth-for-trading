@@ -78,6 +78,10 @@ class CacheManager {
     return `stock_stats:${symbol}:${timeframe}`;
   }
 
+  getStockDetailKey(symbol, timeframe) {
+    return `stock_detail:${symbol}:${timeframe}`;
+  }
+
   getCacheTimestampKey(timeframe) {
     return `cache_timestamp:${timeframe}`;
   }
@@ -91,9 +95,32 @@ class CacheManager {
       '3M': 3600,    // 1 hour  
       '6M': 7200,    // 2 hours
       '1Y': 7200,    // 2 hours
-      'MAX': 86400,  // 24 hours (historical data changes infrequently)
+      'MAX': this.getMaxTTL(),  // Dynamic TTL until market close + 1 hour
     };
     return ttlMap[timeframe] || 3600; // default 1 hour
+  }
+
+  /**
+   * Calculate dynamic TTL for MAX timeframe until next market close + buffer
+   */
+  getMaxTTL() {
+    const now = new Date();
+    const today = new Date(now);
+    
+    // Set to 18:00 (6 PM) Warsaw time - after market close (17:00)
+    const marketCloseToday = new Date(today);
+    marketCloseToday.setHours(18, 0, 0, 0);
+    
+    // If it's already past 6 PM today, set for tomorrow 6 PM
+    const targetTime = now > marketCloseToday 
+      ? new Date(marketCloseToday.getTime() + 24 * 60 * 60 * 1000)
+      : marketCloseToday;
+    
+    // Calculate seconds until target time
+    const secondsUntilRefresh = Math.floor((targetTime - now) / 1000);
+    
+    // Minimum 1 hour, maximum 25 hours (for weekend/holidays)
+    return Math.max(3600, Math.min(secondsUntilRefresh, 25 * 3600));
   }
 
   /**

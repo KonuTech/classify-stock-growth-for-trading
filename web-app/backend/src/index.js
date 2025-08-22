@@ -314,13 +314,27 @@ app.get('/api/stocks/:symbol', async (req, res) => {
   
   console.log(`📈 Fetching details for stock: ${symbol}, timeframe: ${timeframe}`);
   
+  // Check cache first (especially important for MAX timeframe)
+  const cacheKey = cacheManager.getStockDetailKey(symbol, timeframe);
+  const cachedData = await cacheManager.get(cacheKey);
+  
+  if (cachedData) {
+    console.log(`⚡ Returning cached stock details for ${symbol} (${timeframe})`);
+    return res.json(cachedData);
+  }
+  
   // Calculate date range based on timeframe
   let daysBack;
+  let useTimeframeFilter = true;
   switch(timeframe) {
     case '1M': daysBack = 30; break;
     case '3M': daysBack = 90; break;
     case '6M': daysBack = 180; break;
     case '1Y': daysBack = 365; break;
+    case 'MAX': 
+      useTimeframeFilter = false; 
+      daysBack = null;
+      break;
     default: daysBack = 90;
   }
   
@@ -350,21 +364,46 @@ app.get('/api/stocks/:symbol', async (req, res) => {
       return res.status(404).json({ error: 'Stock not found' });
     }
     
-    // Get price history with parameterized query
-    const priceHistory = await pool.query(`
-      SELECT 
-        sp.trading_date_local as date,
-        sp.open_price as open,
-        sp.high_price as high,
-        sp.low_price as low,
-        sp.close_price as close,
-        sp.volume
-      FROM stock_prices sp
-      JOIN base_instruments bi ON sp.stock_id = bi.id
-      WHERE bi.symbol = $1 
-        AND sp.trading_date_local >= CURRENT_DATE - INTERVAL '1 day' * $2
-      ORDER BY sp.trading_date_local ASC;
-    `, [symbol, daysBack]);
+    // Get price history with conditional timeframe filtering
+    let priceHistoryQuery;
+    let priceHistoryParams;
+    
+    if (useTimeframeFilter) {
+      // Use timeframe filter for 1M, 3M, 6M, 1Y
+      priceHistoryQuery = `
+        SELECT 
+          sp.trading_date_local as date,
+          sp.open_price as open,
+          sp.high_price as high,
+          sp.low_price as low,
+          sp.close_price as close,
+          sp.volume
+        FROM stock_prices sp
+        JOIN base_instruments bi ON sp.stock_id = bi.id
+        WHERE bi.symbol = $1 
+          AND sp.trading_date_local >= CURRENT_DATE - INTERVAL '1 day' * $2
+        ORDER BY sp.trading_date_local ASC;
+      `;
+      priceHistoryParams = [symbol, daysBack];
+    } else {
+      // MAX timeframe - get all historical data
+      priceHistoryQuery = `
+        SELECT 
+          sp.trading_date_local as date,
+          sp.open_price as open,
+          sp.high_price as high,
+          sp.low_price as low,
+          sp.close_price as close,
+          sp.volume
+        FROM stock_prices sp
+        JOIN base_instruments bi ON sp.stock_id = bi.id
+        WHERE bi.symbol = $1
+        ORDER BY sp.trading_date_local ASC;
+      `;
+      priceHistoryParams = [symbol];
+    }
+    
+    const priceHistory = await pool.query(priceHistoryQuery, priceHistoryParams);
     
     const response = {
       ...stockInfo.rows[0],
@@ -372,6 +411,11 @@ app.get('/api/stocks/:symbol', async (req, res) => {
     };
     
     console.log(`✅ Found ${response.total_records} total records, ${priceHistory.rows.length} in timeframe`);
+    
+    // Cache the results (especially important for MAX timeframe)
+    await cacheManager.set(cacheKey, response, timeframe);
+    console.log(`📦 Cached stock details for ${symbol} (${timeframe})`);
+    
     res.json(response);
   } catch (error) {
     console.error('❌ Error fetching stock details:', error);
@@ -781,6 +825,43 @@ app.delete('/api/cache', async (req, res) => {
   } catch (error) {
     console.error('❌ Error invalidating cache:', error);
     res.status(500).json({ error: 'Failed to invalidate cache', details: error.message });
+  }
+});
+
+// ETL webhook for cache invalidation on new daily data
+app.post('/api/etl/data-loaded', async (req, res) => {
+  try {
+    const { symbols, trading_date, records_count } = req.body;
+    
+    console.log(`📈 ETL webhook triggered - New data loaded for ${symbols?.length || 'unknown'} symbols on ${trading_date}`);
+    console.log(`📊 Records processed: ${records_count || 'unknown'}`);
+    
+    // Invalidate cache for MAX timeframe since it contains all historical data
+    // and needs to include the new daily data
+    await cacheManager.invalidate('MAX');
+    console.log('🗑️ Invalidated MAX timeframe cache due to new daily data');
+    
+    // Also invalidate recent timeframes that might include the new trading day
+    const timeframesToInvalidate = ['1M', '3M', '6M', '1Y'];
+    for (const timeframe of timeframesToInvalidate) {
+      await cacheManager.invalidate(timeframe);
+      console.log(`🗑️ Invalidated ${timeframe} timeframe cache`);
+    }
+    
+    res.json({
+      status: 'OK',
+      message: `Cache invalidated for new data on ${trading_date}`,
+      symbols_processed: symbols?.length || 0,
+      records_count: records_count || 0,
+      timeframes_invalidated: ['MAX', ...timeframesToInvalidate],
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Error processing ETL webhook:', error);
+    res.status(500).json({ 
+      error: 'Failed to process ETL webhook', 
+      details: error.message 
+    });
   }
 });
 

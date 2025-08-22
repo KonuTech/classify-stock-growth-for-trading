@@ -8,6 +8,7 @@ import WatchlistButton from './components/WatchlistButton';
 import ThemeToggle from './components/ThemeToggle';
 import Card from './components/ui/Card';
 import Button from './components/ui/Button';
+import { useWatchlist, WatchlistProvider } from './contexts/WatchlistContext';
 
 // Define what our stock data looks like
 interface Stock {
@@ -31,10 +32,19 @@ function AppContent() {
   const [error, setError] = useState<string | null>(null);
   const [selectedStock, setSelectedStock] = useState<string | null>(null);
   const [showComparison, setShowComparison] = useState(false);
+  const [comparisonInitialStocks, setComparisonInitialStocks] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState<'symbol' | 'name' | 'price' | 'records' | 'total_return' | 'max_drawdown' | 'price_range'>('symbol');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [sortBy, setSortBy] = useState<'symbol' | 'name' | 'price' | 'records' | 'total_return' | 'max_drawdown' | 'price_range'>('total_return');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [timeframe, setTimeframe] = useState<'1M' | '3M' | '6M' | '1Y' | 'MAX'>('1Y');
+
+  // Watchlist functionality
+  const { watchlist, watchlistCount } = useWatchlist();
+
+  // Helper function to clean stock names
+  const cleanStockName = (name: string) => {
+    return name.replace(/ Stock$/, '').replace(/ stock$/, '');
+  };
 
   // useEffect runs code when the component loads
   useEffect(() => {
@@ -114,6 +124,15 @@ function AppContent() {
     return filtered;
   }, [stocks, searchTerm, sortBy, sortOrder]);
 
+  // Get watchlisted stocks with their full data
+  const watchlistedStocks = useMemo(() => {
+    if (watchlist.length === 0) return [];
+    
+    return stocks.filter(stock => 
+      watchlist.some(watchItem => watchItem.symbol === stock.symbol)
+    );
+  }, [stocks, watchlist]);
+
   // Show loading message
   if (loading) {
     return (
@@ -140,17 +159,9 @@ function AppContent() {
         <div className="max-w-7xl mx-auto py-6 px-4">
           <div className="flex justify-between items-center">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-              📊 Stock Analysis Dashboard
+              Stock Analysis Dashboard
             </h1>
-            <div className="flex items-center space-x-4">
-              <Button 
-                variant="outline" 
-                onClick={() => setShowComparison(true)}
-                className="flex items-center space-x-2"
-              >
-                <span>📈</span>
-                <span>Compare Stocks</span>
-              </Button>
+            <div className="flex items-center">
               <ThemeToggle />
             </div>
           </div>
@@ -164,11 +175,11 @@ function AppContent() {
           <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-200 mb-4">
             Portfolio Overview
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <Card className="p-5">
               <div className="flex items-center">
                 <div className="flex-shrink-0">
-                  <div className="text-2xl">📈</div>
+                  <div className="text-2xl">🏢</div>
                 </div>
                 <div className="ml-5 w-0 flex-1">
                   <dl>
@@ -177,6 +188,24 @@ function AppContent() {
                     </dt>
                     <dd className="text-lg font-medium text-gray-900 dark:text-white">
                       {filteredAndSortedStocks.length} / {stocks.length}
+                    </dd>
+                  </dl>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-5">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <div className="text-2xl">✅</div>
+                </div>
+                <div className="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                      Watchlisted
+                    </dt>
+                    <dd className="text-lg font-medium text-gray-900 dark:text-white">
+                      {watchlistCount} / {stocks.length}
                     </dd>
                   </dl>
                 </div>
@@ -224,6 +253,128 @@ function AppContent() {
           </div>
         </div>
 
+        {/* Watchlisted Stocks Section */}
+        {watchlistedStocks.length > 0 && (
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-200 flex items-center space-x-2">
+                <span>🚀🌕</span>
+                <span>Watchlisted Stocks</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400 font-normal">({watchlistedStocks.length})</span>
+              </h2>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setComparisonInitialStocks(watchlistedStocks.map(stock => stock.symbol));
+                  setShowComparison(true);
+                }}
+                className="flex items-center space-x-2 text-sm"
+              >
+                <span>📈</span>
+                <span>Compare Watchlist</span>
+              </Button>
+            </div>
+            
+            <Card className="overflow-hidden">
+              <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+                {watchlistedStocks.map((stock) => (
+                  <li key={`watchlist-${stock.symbol}`}>
+                    <div 
+                      className="px-4 py-4 sm:px-6 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors bg-red-50 dark:bg-red-900/20"
+                      onClick={() => setSelectedStock(stock.symbol)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0">
+                            <div className="h-10 w-10 rounded-full bg-red-500 flex items-center justify-center">
+                              <span className="text-xs font-medium text-white">
+                                {stock.symbol.substring(0, 3)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-6">
+                          {/* Current Price */}
+                          <div className="text-right min-w-[100px]">
+                            <div className="text-xs text-gray-500 dark:text-gray-400 uppercase">Current Price</div>
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">
+                              {stock.latest_price ? 
+                                `${parseFloat(stock.latest_price.toString()).toFixed(2)} PLN` : 
+                                <span className="text-amber-600 dark:text-amber-400">N/A</span>
+                              }
+                            </div>
+                          </div>
+
+                          {/* Price Range */}
+                          <div className="text-right min-w-[100px]">
+                            <div className="text-xs text-gray-500 dark:text-gray-400 uppercase">Price Range</div>
+                            <div className="text-sm text-gray-900 dark:text-white">
+                              {stock.price_range ? 
+                                `${parseFloat(stock.price_range.toString()).toFixed(2)}` : 
+                                <span className="text-amber-600 dark:text-amber-400">N/A</span>
+                              }
+                            </div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              {stock.highest_price && stock.lowest_price ? 
+                                `${parseFloat(stock.lowest_price.toString()).toFixed(2)} - ${parseFloat(stock.highest_price.toString()).toFixed(2)}` : 
+                                ''
+                              }
+                            </div>
+                          </div>
+
+                          {/* Total Return */}
+                          <div className="text-right min-w-[100px]">
+                            <div className="text-xs text-gray-500 dark:text-gray-400 uppercase">Total Return</div>
+                            <div className={`text-sm font-medium ${
+                              stock.total_return === null || stock.total_return === undefined
+                                ? 'text-amber-600 dark:text-amber-400' 
+                                : parseFloat(stock.total_return.toString()) >= 0 
+                                  ? 'text-green-600 dark:text-green-400' 
+                                  : 'text-red-600 dark:text-red-400'
+                            }`}>
+                              {stock.total_return !== null && stock.total_return !== undefined ? 
+                                `${parseFloat(stock.total_return.toString()) >= 0 ? '+' : ''}${parseFloat(stock.total_return.toString()).toFixed(1)}%` : 
+                                'N/A'
+                              }
+                            </div>
+                          </div>
+
+                          {/* Max Drawdown */}
+                          <div className="text-right min-w-[100px]">
+                            <div className="text-xs text-gray-500 dark:text-gray-400 uppercase">Max Drawdown</div>
+                            <div className={`text-sm font-medium ${
+                              parseFloat(stock.max_drawdown.toString()) <= -10 
+                                ? 'text-red-600 dark:text-red-400' 
+                                : parseFloat(stock.max_drawdown.toString()) <= -5 
+                                  ? 'text-orange-600 dark:text-orange-400' 
+                                  : 'text-gray-900 dark:text-white'
+                            }`}>
+                              {parseFloat(stock.max_drawdown.toString()).toFixed(1)}%
+                            </div>
+                          </div>
+
+                          {/* Records */}
+                          <div className="text-right min-w-[80px]">
+                            <div className="text-xs text-gray-500 dark:text-gray-400 uppercase">Records</div>
+                            <div className="text-sm text-gray-900 dark:text-white">
+                              {stock.total_records.toLocaleString()}
+                            </div>
+                          </div>
+
+                          {/* Watchlist Button */}
+                          <div className="flex items-center justify-center min-w-[60px]">
+                            <WatchlistButton stock={stock} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          </div>
+        )}
+
         {/* Search and Filter */}
         <StockFilter
           searchTerm={searchTerm}
@@ -267,9 +418,22 @@ function AppContent() {
 
         {/* Stocks list */}
         <div>
-          <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-200 mb-4">
-            Stocks List {searchTerm && `(${filteredAndSortedStocks.length} results)`}
-          </h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-200">
+              Stocks List {searchTerm && `(${filteredAndSortedStocks.length} results)`}
+            </h2>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setComparisonInitialStocks([]);
+                setShowComparison(true);
+              }}
+              className="flex items-center space-x-2"
+            >
+              <span>📈</span>
+              <span>Compare Stocks</span>
+            </Button>
+          </div>
           
           {filteredAndSortedStocks.length === 0 ? (
             <Card className="p-8 text-center">
@@ -299,22 +463,9 @@ function AppContent() {
                         <div className="flex items-center">
                           <div className="flex-shrink-0">
                             <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center">
-                              <span className="text-sm font-medium text-white">
-                                {stock.symbol.substring(0, 2)}
+                              <span className="text-xs font-medium text-white">
+                                {stock.symbol.substring(0, 3)}
                               </span>
-                            </div>
-                          </div>
-                          <div className="ml-4">
-                            <div className="flex text-sm">
-                              <p className="font-medium text-indigo-600 dark:text-indigo-400 truncate">
-                                {stock.symbol}
-                              </p>
-                              <p className="ml-1 text-gray-500 dark:text-gray-400">
-                                ({stock.currency})
-                              </p>
-                            </div>
-                            <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                              {stock.name}
                             </div>
                           </div>
                         </div>
@@ -335,7 +486,7 @@ function AppContent() {
                             <div className="text-xs text-gray-500 dark:text-gray-400 uppercase">Price Range</div>
                             <div className="text-sm text-gray-900 dark:text-white">
                               {stock.price_range ? 
-                                `${parseFloat(stock.price_range.toString()).toFixed(2)} PLN` : 
+                                `${parseFloat(stock.price_range.toString()).toFixed(2)}` : 
                                 <span className="text-amber-600 dark:text-amber-400">N/A</span>
                               }
                             </div>
@@ -358,7 +509,7 @@ function AppContent() {
                                   : 'text-red-600 dark:text-red-400'
                             }`}>
                               {stock.total_return !== null && stock.total_return !== undefined ? 
-                                `${parseFloat(stock.total_return.toString()) >= 0 ? '+' : ''}${parseFloat(stock.total_return.toString()).toFixed(2)}%` : 
+                                `${parseFloat(stock.total_return.toString()) >= 0 ? '+' : ''}${parseFloat(stock.total_return.toString()).toFixed(1)}%` : 
                                 'N/A'
                               }
                             </div>
@@ -374,16 +525,20 @@ function AppContent() {
                                   ? 'text-orange-600 dark:text-orange-400' 
                                   : 'text-gray-900 dark:text-white'
                             }`}>
-                              {parseFloat(stock.max_drawdown.toString()).toFixed(2)}%
+                              {parseFloat(stock.max_drawdown.toString()).toFixed(1)}%
                             </div>
                           </div>
 
-                          {/* Records & Actions */}
+                          {/* Records */}
                           <div className="text-right min-w-[80px]">
                             <div className="text-xs text-gray-500 dark:text-gray-400 uppercase">Records</div>
                             <div className="text-sm text-gray-900 dark:text-white">
                               {stock.total_records.toLocaleString()}
                             </div>
+                          </div>
+
+                          {/* Watchlist Button */}
+                          <div className="flex items-center justify-center min-w-[60px]">
                             <WatchlistButton stock={stock} />
                           </div>
                         </div>
@@ -408,7 +563,11 @@ function AppContent() {
       {/* Stock Comparison Modal */}
       {showComparison && (
         <StockComparison 
-          onClose={() => setShowComparison(false)}
+          initialStocks={comparisonInitialStocks}
+          onClose={() => {
+            setShowComparison(false);
+            setComparisonInitialStocks([]);
+          }}
         />
       )}
     </div>
@@ -419,7 +578,9 @@ function AppContent() {
 function App() {
   return (
     <ThemeProvider>
-      <AppContent />
+      <WatchlistProvider>
+        <AppContent />
+      </WatchlistProvider>
     </ThemeProvider>
   );
 }

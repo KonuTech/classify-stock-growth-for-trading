@@ -80,3 +80,7 @@ Best parameters: {'colsample_bytree': 1.0, 'learning_rate': 0.15, 'max_depth': 8
 
 
 Pooling for CPUs in Airflow
+
+make dev-restart
+
+make web MODE=restart

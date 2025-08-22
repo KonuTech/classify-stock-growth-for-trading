@@ -877,6 +877,42 @@ REDIS_PORT=6379         # Standard Redis port
 - **Memory Pressure**: LRU eviction policy automatically removes least recently used keys
 - **Connection Recovery**: Automatic reconnection when Redis becomes available
 
+### ETL-Triggered Cache Invalidation
+**Automated Cache Refresh**: ETL webhook endpoint at `/api/etl/data-loaded` automatically invalidates relevant cache when new daily data is loaded:
+
+```bash
+# ETL webhook automatically called when new data is loaded
+curl -X POST http://localhost:3001/api/etl/data-loaded \
+  -H "Content-Type: application/json" \
+  -d '{
+    "symbols": ["XTB", "PKN", "CCC"],
+    "trading_date": "2025-01-22", 
+    "records_count": 3
+  }'
+```
+
+**Intelligent Cache Invalidation**:
+- **MAX timeframe**: Always invalidated (contains all historical data)
+- **Recent timeframes**: 1M, 3M, 6M, 1Y invalidated (may include new trading day)
+- **Selective Strategy**: Only invalidates caches that could contain the new data
+- **Comprehensive Logging**: Full webhook processing with detailed invalidation tracking
+
+## Web Application UI Design Patterns
+
+### Current UI Design Decisions (August 2025)
+**Stock List Display**:
+- **Symbol Circles**: 3-letter symbols (XTB, PKN, CCC) instead of 2-letter for better readability
+- **Clean Interface**: Company names removed from list rows - only circles with symbols displayed
+- **Currency Display**: Standardized "PLN" instead of "zł" symbol across all components
+- **Percentage Precision**: All percentages rounded to 1 decimal place (not 2) for cleaner display
+- **Price Range**: Removed "PLN" suffix from price range column to reduce visual clutter
+- **Watchlist Heart**: Moved to separate column at far right, enlarged for better accessibility
+
+**Component-Specific Patterns**:
+- **Error-Safe Price Formatting**: All `formatPrice` functions handle both string and number inputs with NaN validation
+- **Consistent Stock Name Cleaning**: `cleanStockName()` function removes "Stock" suffix across all components  
+- **Proper Function Hoisting**: Helper functions defined before usage to prevent initialization errors
+
 # important-instruction-reminders
 Do what has been asked; nothing more, nothing less.
 NEVER create files unless they're absolutely necessary for achieving your goal.
