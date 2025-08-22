@@ -1,4 +1,4 @@
-.PHONY: start stop restart extract-credentials clean help init-dev init-test init-prod setup-airflow fix-schema-permissions trigger-dev-dag trigger-test-dag trigger-prod-dag trigger-dev-ml-dags trigger-test-ml-dags trigger-prod-ml-dags trigger-ml-stock start-with-web web-start web-stop web-restart web-build web-logs web-clean web-test web-status
+.PHONY: start stop restart start-services extract-credentials clean help init-dev init-test init-prod setup-airflow fix-schema-permissions trigger-dev-dag trigger-test-dag trigger-prod-dag trigger-dev-ml-dags trigger-test-ml-dags trigger-prod-ml-dags trigger-ml-stock start-with-web web-start web-stop web-restart web-build web-logs web-clean web-test web-status restart-airflow
 
 # Default target
 help:
@@ -293,6 +293,8 @@ clean:
 	docker rmi apache/airflow:3.0.4-python3.12 -f 2>/dev/null || echo "Airflow image not found"
 	docker rmi postgres:17-alpine -f 2>/dev/null || echo "PostgreSQL image not found"
 	docker rmi dpage/pgadmin4:latest -f 2>/dev/null || echo "pgAdmin image not found"
+	docker rmi classify-stock-growth-for-trading-web-frontend -f 2>/dev/null || echo "Web frontend image not found"
+	docker rmi classify-stock-growth-for-trading-web-backend -f 2>/dev/null || echo "Web backend image not found"
 	@echo "Removing all untagged images..."
 	docker rmi $$(docker images -q) -f 2>/dev/null || echo "No images to remove"
 	docker system prune -a --volumes -f
@@ -301,6 +303,9 @@ clean:
 	@rm -rf stock_etl/airflow_logs/dag_id=*
 	@rm -rf stock_etl/airflow_logs/dag_processor/*
 	@rm -rf stock_etl/airflow_logs/etl/*.log
+	@echo "Cleaning web application build artifacts..."
+	@rm -rf web-app/frontend/build web-app/backend/dist 2>/dev/null || echo "No web app builds to clean"
+	@rm -rf web-app/frontend/node_modules/.cache 2>/dev/null || echo "No frontend cache to clean"
 	@echo "Complete cleanup finished"
 
 # ==================== WEB APPLICATION COMMANDS (INTEGRATED) ====================

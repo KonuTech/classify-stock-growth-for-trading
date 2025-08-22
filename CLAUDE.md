@@ -195,6 +195,15 @@ npm test                            # Run test suite
 curl http://localhost:3001/health    # Backend health check
 curl http://localhost:3001/api/stocks # Test API endpoint
 # Frontend: http://localhost:3000 (React dashboard)
+
+# Comprehensive API Testing (see README.md for full examples with expected results)
+curl -s http://localhost:3001/health                                # Health check
+curl -s http://localhost:3001/test-db                              # Database connectivity  
+curl -s http://localhost:3001/api/stocks                           # All stocks list
+curl -s "http://localhost:3001/api/stocks/XTB?timeframe=1M"        # Stock details with OHLCV
+curl -s http://localhost:3001/api/models                           # ML model performance
+curl -s "http://localhost:3001/api/predictions/XTB?limit=5"        # ML trading signals
+curl -s -I http://localhost:3000 | head -5                        # Frontend accessibility
 ```
 
 ## Database Schemas
@@ -526,6 +535,9 @@ cd web-app/frontend && npm start     # Frontend React app (with hot reload)
 # Frontend: http://localhost:3000
 # Backend API: http://localhost:3001  
 # Database: localhost:5432/stock_data
+
+# Full API testing framework with 10 comprehensive test cases available in README.md
+# Includes expected results for all endpoints with real production data
 ```
 
 ## Machine Learning Pipeline (`stock_ml/`)

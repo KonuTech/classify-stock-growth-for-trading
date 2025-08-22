@@ -407,6 +407,159 @@ curl "http://localhost:3001/api/stocks/XTB?timeframe=3M" # Test stock details AP
 # Frontend: http://localhost:3000 (interactive dashboard)
 ```
 
+#### 🧪 Comprehensive API Testing Examples
+
+After starting the web application services, use these comprehensive curl commands to test all API endpoints with expected results:
+
+```bash
+# 1. Backend Health Check
+curl -s http://localhost:3001/health
+# Expected Result:
+# {"status":"OK","timestamp":"2025-08-22T09:05:54.621Z"}
+
+# 2. Database Connectivity Test
+curl -s http://localhost:3001/test-db
+# Expected Result:
+# {"status":"Database connection OK","instrumentCount":"14"}
+
+# 3. Get All Stocks List (Production Data)
+curl -s http://localhost:3001/api/stocks
+# Expected Result: Array of 10 stocks with real market data
+# [
+#   {
+#     "symbol":"BDX","name":"BDX Stock","currency":"PLN","total_records":"7565",
+#     "latest_date":"2025-08-21T00:00:00.000Z","latest_price":"572.000000"
+#   },
+#   {
+#     "symbol":"CDR","name":"CDR Stock","currency":"PLN","total_records":"7717",
+#     "latest_date":"2025-08-21T00:00:00.000Z","latest_price":"260.900000"
+#   },
+#   ... (8 more stocks with similar structure)
+# ]
+
+# 4. Get Specific Stock Details with Price History (1 Month)
+curl -s "http://localhost:3001/api/stocks/XTB?timeframe=1M"
+# Expected Result: Complete stock info with 21 trading days of OHLCV data
+# {
+#   "symbol":"XTB","name":"XTB Stock","currency":"PLN","total_records":"2308",
+#   "latest_date":"2025-08-21T00:00:00.000Z","latest_price":"77.500000",
+#   "price_history":[
+#     {"date":"2025-07-23T00:00:00.000Z","open":"71.700000","high":"72.180000",
+#      "low":"71.340000","close":"71.600000","volume":"191226"},
+#     {"date":"2025-07-24T00:00:00.000Z","open":"71.660000","high":"73.160000",
+#      "low":"71.660000","close":"72.920000","volume":"249314"},
+#     ... (19 more price records)
+#   ]
+# }
+
+# 5. Test Different Timeframes for Stock Details
+curl -s "http://localhost:3001/api/stocks/XTB?timeframe=3M"  # 3 months (default)
+curl -s "http://localhost:3001/api/stocks/XTB?timeframe=6M"  # 6 months
+curl -s "http://localhost:3001/api/stocks/XTB?timeframe=1Y"  # 1 year
+
+# 6. Get ML Model Performance Metrics (Production Models)
+curl -s http://localhost:3001/api/models
+# Expected Result: 10 active ML models sorted by ROC-AUC performance
+# [
+#   {
+#     "symbol":"ELT","model_version":"v2.1_prod.20250821_153641",
+#     "test_roc_auc":"0.567061","test_accuracy":"0.526198",
+#     "hyperparameters":{"max_depth":10,"reg_alpha":0,"subsample":0.8,...},
+#     "trained_at":"2025-08-21T15:36:41.665Z"
+#   },
+#   {
+#     "symbol":"GPW","model_version":"v2.1_prod.20250821_153647",
+#     "test_roc_auc":"0.557226","test_accuracy":"0.447332",...
+#   },
+#   ... (8 more models with decreasing ROC-AUC scores)
+# ]
+
+# 7. Get ML Predictions for Stock (Recent Trading Signals)
+curl -s "http://localhost:3001/api/predictions/XTB?limit=5"
+# Expected Result: 5 most recent ML predictions with trading signals
+# [
+#   {
+#     "prediction_date":"2025-08-21T00:00:00.000Z","target_date":"2025-08-28T00:00:00.000Z",
+#     "predicted_class":false,"prediction_probability":"0.448942","trading_signal":"HOLD",
+#     "actual_class":null
+#   },
+#   {
+#     "prediction_date":"2025-08-20T00:00:00.000Z","target_date":"2025-08-27T00:00:00.000Z",
+#     "predicted_class":false,"prediction_probability":"0.454865","trading_signal":"HOLD",...
+#   },
+#   ... (3 more recent predictions)
+# ]
+
+# 8. Test Different Stocks and Prediction Limits
+curl -s "http://localhost:3001/api/predictions/CDR?limit=10"  # CDR stock, 10 predictions
+curl -s "http://localhost:3001/api/predictions/BDX?limit=3"   # BDX stock, 3 predictions
+
+# 9. Frontend Accessibility Check
+curl -s -I http://localhost:3000 | head -5
+# Expected Result: HTTP 200 with CORS headers
+# HTTP/1.1 200 OK
+# X-Powered-By: Express
+# Access-Control-Allow-Origin: *
+# Access-Control-Allow-Methods: *
+# Access-Control-Allow-Headers: *
+
+# 10. Error Handling Tests
+curl -s http://localhost:3001/api/stocks/INVALID_SYMBOL
+# Expected Result: {"error": "Stock not found"} with HTTP 404
+
+curl -s "http://localhost:3001/api/predictions/INVALID?limit=5"
+# Expected Result: [] (empty array for non-existent stock)
+```
+
+#### 📊 API Response Data Structure
+
+**Stock List Response (`/api/stocks`)**:
+- **symbol**: Stock trading symbol (e.g., "XTB", "CDR")
+- **name**: Full company name
+- **currency**: Trading currency (PLN for Polish stocks)
+- **total_records**: Total historical records available
+- **latest_date**: Most recent trading date  
+- **latest_price**: Current/latest stock price
+
+**Stock Details Response (`/api/stocks/:symbol`)**:
+- All fields from stock list, plus:
+- **price_history**: Array of OHLCV data for specified timeframe
+  - **date**: Trading date
+  - **open/high/low/close**: OHLC prices
+  - **volume**: Trading volume
+
+**ML Models Response (`/api/models`)**:
+- **symbol**: Stock symbol for which model was trained
+- **model_version**: Unique version identifier with timestamp
+- **test_roc_auc**: Model performance (ROC-AUC score)
+- **test_accuracy**: Classification accuracy
+- **hyperparameters**: XGBoost model configuration
+- **trained_at**: Model training timestamp
+
+**ML Predictions Response (`/api/predictions/:symbol`)**:
+- **prediction_date**: Date when prediction was made
+- **target_date**: Future date for which growth is predicted
+- **predicted_class**: Boolean - true for growth, false for decline
+- **prediction_probability**: Model confidence (0.0-1.0)
+- **trading_signal**: Human-readable signal (BUY/HOLD/SELL)
+- **actual_class**: Actual outcome (null for future dates)
+
+#### 🎯 Expected Performance Metrics
+
+**API Response Times** (localhost):
+- Health check: < 10ms
+- Stock list: < 50ms (10 stocks)
+- Stock details: < 100ms (includes price history query)
+- ML models: < 150ms (complex joins across ML tables)
+- ML predictions: < 200ms (time-series queries)
+
+**Data Volumes** (Production):
+- **Total stocks**: 10 active Polish stocks
+- **Historical records**: 50,000+ OHLCV data points  
+- **ML models**: 10 trained XGBoost models
+- **ML predictions**: 1,000+ trading signals
+- **Database size**: ~100MB with indexes
+
 ## 🔧 Configuration
 
 ### Environment Variables
