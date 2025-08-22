@@ -1,4 +1,4 @@
-.PHONY: start stop restart start-services extract-credentials clean help init-dev init-test init-prod setup-airflow fix-schema-permissions trigger-dev-dag trigger-test-dag trigger-prod-dag trigger-dev-ml-dags trigger-test-ml-dags trigger-prod-ml-dags trigger-ml-stock start-with-web web-start web-stop web-restart web-build web-logs web-clean web-test web-status restart-airflow
+.PHONY: start stop restart start-services extract-credentials clean help init-dev init-test init-prod setup-airflow fix-schema-permissions trigger-dev-dag trigger-test-dag trigger-prod-dag trigger-dev-ml-dags trigger-test-ml-dags trigger-prod-ml-dags trigger-ml-stock start-with-web web-start web-stop web-restart web-build web-logs web-clean web-test web-status restart-airflow dev-restart docker-restart docker-clean dev-web-start dev-web-stop dev-web-restart dev-web-status dev-web-backend dev-web-frontend dev-web-install
 
 # Default target
 help:
@@ -13,7 +13,10 @@ help:
 	@echo "  make extract-credentials - Extract service credentials to .env file"
 	@echo "  make setup-airflow      - Setup Airflow database connections only"
 	@echo "  make stop               - Stop all services"
-	@echo "  make restart            - Restart all services with complete setup"
+	@echo "  make restart            - Restart infrastructure only (Docker services)"
+	@echo "  make docker-restart     - Restart ALL Docker services (preserves data)"
+	@echo "  make docker-clean       - CLEAN restart with database reinitialization (deletes data)"
+	@echo "  make dev-restart        - Restart EVERYTHING (infrastructure + development web app)"
 	@echo "  make clean              - Stop services and clean up completely"
 	@echo ""
 	@echo "📊 ETL DAGs:"
@@ -26,16 +29,28 @@ help:
 	@echo "  make trigger-prod-ml-dags  - Trigger all production ML DAGs (prod_ml_pipeline_*)"
 	@echo "  make trigger-ml-stock STOCK=XTB - Trigger ML training for specific stock (test & prod)"
 	@echo ""
-	@echo "🌐 Web Application (Integrated):"
-	@echo "  make start-with-web     - Start complete infrastructure WITH web application"
-	@echo "  make web-start          - Start web application services only (requires database)"
-	@echo "  make web-stop           - Stop web application services"
-	@echo "  make web-restart        - Restart web application with latest changes"
+	@echo "🌐 Web Application (Production - Docker):"
+	@echo "  make start-with-web     - Start complete infrastructure WITH Docker web application"
+	@echo "  make docker-restart     - Restart ALL Docker services (preserves data)"
+	@echo "  make docker-clean       - CLEAN restart with database reinitialization (deletes data)"
+	@echo "  make web-start          - Start Docker web application services only"
+	@echo "  make web-stop           - Stop Docker web application services"
+	@echo "  make web-restart        - Restart Docker web application with latest changes"
 	@echo "  make web-build          - Build web application Docker images"
-	@echo "  make web-logs           - Show web application logs"
+	@echo "  make web-logs           - Show Docker web application logs"
 	@echo "  make web-clean          - Clean web application containers and images"
 	@echo "  make web-test           - Test web application connectivity"
 	@echo "  make web-status         - Show web application status and URLs"
+	@echo ""
+	@echo "⚡ Web Application (Development - Local):"
+	@echo "  make dev-restart        - Restart EVERYTHING (infrastructure + development web app)"
+	@echo "  make dev-web-install    - Install frontend dependencies"
+	@echo "  make dev-web-start      - Start backend and frontend in development mode"
+	@echo "  make dev-web-backend    - Start only backend API server"
+	@echo "  make dev-web-frontend   - Start only frontend development server"
+	@echo "  make dev-web-restart    - Restart development web services only"
+	@echo "  make dev-web-stop       - Stop development web services"
+	@echo "  make dev-web-status     - Show development web services status"
 	@echo ""
 	@echo "❓ Help:"
 	@echo "  make help               - Show this help"
@@ -78,6 +93,46 @@ stop:
 
 # Restart services with complete development setup
 restart: stop start
+
+# Restart ALL Docker services (preserves data)
+docker-restart:
+	@echo "🐳 DOCKER RESTART (Data Preserved)"
+	@echo "=================================="
+	@echo ""
+	@echo "Step 1: Restarting Docker services..."
+	@docker-compose restart
+	@echo ""
+	@echo "Step 2: Waiting for services to stabilize..."
+	@sleep 20
+	@echo ""
+	@echo "✅ DOCKER RESTART FINISHED!"
+	@echo "============================"
+	@echo ""
+	@echo "🐳 All Docker Services Status:"
+	@make web-status
+
+# CLEAN restart with database reinitialization (deletes data)
+docker-clean:
+	@echo "🧹 DOCKER CLEAN RESTART (⚠️  DELETES ALL DATA)"
+	@echo "==============================================="
+	@echo ""
+	@echo "⚠️  WARNING: This will DELETE all database data!"
+	@echo "   - All stock prices and ETL job history"
+	@echo "   - All ML models and predictions"  
+	@echo "   - All schemas will be reinitialized from scratch"
+	@echo ""
+	@echo "Step 1: Stopping all Docker services..."
+	@make stop
+	@sleep 5
+	@echo ""
+	@echo "Step 2: Starting complete infrastructure + Docker web application..."
+	@make start-with-web
+	@echo ""
+	@echo "✅ DOCKER CLEAN RESTART FINISHED!"
+	@echo "=================================="
+	@echo ""
+	@echo "🐳 All Docker Services Status:"
+	@make web-status
 
 # Rebuild Airflow service with dependencies (for DAG fixes)
 restart-airflow:
@@ -306,6 +361,8 @@ clean:
 	@echo "Cleaning web application build artifacts..."
 	@rm -rf web-app/frontend/build web-app/backend/dist 2>/dev/null || echo "No web app builds to clean"
 	@rm -rf web-app/frontend/node_modules/.cache 2>/dev/null || echo "No frontend cache to clean"
+	@echo "Stopping any running development web processes..."
+	@make dev-web-stop 2>/dev/null || echo "No development web processes to stop"
 	@echo "Complete cleanup finished"
 
 # ==================== WEB APPLICATION COMMANDS (INTEGRATED) ====================
@@ -435,3 +492,111 @@ web-status:
 	@echo "  make web-build       # Build web app images"
 	@echo "  make web-logs        # View web app logs"
 	@echo "  make web-restart     # Restart web application"
+
+# ==================== DEVELOPMENT WEB APPLICATION COMMANDS ====================
+
+# Restart EVERYTHING: Infrastructure + Development Web Application
+dev-restart:
+	@echo "🔄 COMPLETE DEVELOPMENT RESTART"
+	@echo "==============================="
+	@echo ""
+	@echo "Step 1: Stopping all services..."
+	@make dev-web-stop 2>/dev/null || echo "No development web processes to stop"
+	@make stop
+	@sleep 5
+	@echo ""
+	@echo "Step 2: Starting infrastructure (PostgreSQL + Airflow + pgAdmin)..."
+	@make start
+	@echo ""
+	@echo "Step 3: Starting development web application..."
+	@sleep 5
+	@make dev-web-start
+	@echo ""
+	@echo "✅ COMPLETE DEVELOPMENT RESTART FINISHED!"
+	@echo "=========================================="
+	@echo ""
+	@echo "🌐 All Services Status:"
+	@make dev-web-status
+
+# Install frontend dependencies
+dev-web-install:
+	@echo "📦 Installing web application dependencies..."
+	@echo "Installing backend dependencies..."
+	@cd web-app/backend && npm install
+	@echo "Installing frontend dependencies..."
+	@cd web-app/frontend && npm install
+	@echo "✅ All dependencies installed successfully"
+
+# Start both backend and frontend in development mode
+dev-web-start:
+	@echo "⚡ Starting development web application..."
+	@echo "Starting backend API server..."
+	@cd web-app/backend && npm run dev &
+	@sleep 5
+	@echo "Starting frontend development server..."
+	@cd web-app/frontend && npm start &
+	@sleep 10
+	@echo ""
+	@echo "✅ Development web application started!"
+	@make dev-web-status
+
+# Start only backend API server in development mode
+dev-web-backend:
+	@echo "🔧 Starting backend API server..."
+	@cd web-app/backend && npm run dev
+
+# Start only frontend development server
+dev-web-frontend:
+	@echo "🌐 Starting frontend development server..."
+	@cd web-app/frontend && npm start
+
+# Restart development web services
+dev-web-restart:
+	@echo "🔄 Restarting development web application..."
+	@make dev-web-stop
+	@sleep 3
+	@make dev-web-start
+	@echo "✅ Development web application restarted"
+
+# Stop development web services
+dev-web-stop:
+	@echo "🛑 Stopping development web services..."
+	@echo "Stopping Node.js processes..."
+	@pkill -f "npm run dev" 2>/dev/null || echo "Backend not running"
+	@pkill -f "npm start" 2>/dev/null || echo "Frontend not running"
+	@pkill -f "react-scripts start" 2>/dev/null || echo "React dev server not running"
+	@pkill -f "nodemon" 2>/dev/null || echo "Nodemon not running"
+	@echo "✅ Development web services stopped"
+
+# Show development web services status
+dev-web-status:
+	@echo "⚡ Development Web Application Status"
+	@echo "===================================="
+	@echo ""
+	@echo "🌐 Frontend Development Server:"
+	@curl -s -o /dev/null -w "  Status:           %{http_code} (React Dev Server)\n" http://localhost:3000 || echo "  Status:           Not running"
+	@echo ""
+	@echo "🔧 Backend API Server:"
+	@curl -s -o /dev/null -w "  Health Check:     %{http_code}\n" http://localhost:3001/health || echo "  Health Check:     Not running"
+	@curl -s -o /dev/null -w "  Stocks API:       %{http_code}\n" http://localhost:3001/api/stocks || echo "  Stocks API:       Not running"
+	@echo ""
+	@echo "📊 Database Status:"
+	@docker-compose exec postgres pg_isready -U postgres -d stock_data 2>/dev/null | sed 's/^/  /' || echo "  PostgreSQL:       Not running (run 'make start' first)"
+	@echo ""
+	@echo "🔗 Development URLs:"
+	@echo "  Frontend App:     http://localhost:3000 (React Dev Server with Hot Reload)"
+	@echo "  Backend API:      http://localhost:3001 (Express.js with Nodemon)"
+	@echo "  API Health:       http://localhost:3001/health"
+	@echo "  API Stocks:       http://localhost:3001/api/stocks"
+	@echo ""
+	@echo "💡 Development Features:"
+	@echo "  • Hot reload enabled for both frontend and backend"
+	@echo "  • Enhanced debugging with improved error messages"
+	@echo "  • Real-time data from prod_stock_data schema"
+	@echo "  • Console logging for API requests and chart rendering"
+	@echo ""
+	@echo "📋 Development Commands:"
+	@echo "  make dev-web-install   # Install/update dependencies"
+	@echo "  make dev-web-restart   # Restart both services"
+	@echo "  make dev-web-backend   # Start backend only"
+	@echo "  make dev-web-frontend  # Start frontend only"

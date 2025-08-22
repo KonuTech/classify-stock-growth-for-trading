@@ -34,11 +34,13 @@ This platform provides a complete end-to-end solution for AI-powered stock marke
 - **Stores** all ML artifacts (models, predictions, backtests) in production database schemas
 
 ### 🌐 **Web Application Layer**
-- **Visualizes** real-time stock data through modern React dashboard with TypeScript
-- **Displays** ML predictions, trading signals, and model performance metrics  
-- **Provides** interactive features: search, filtering, stock comparison, watchlist management
-- **Offers** responsive design with dark/light themes and mobile optimization
-- **Serves** RESTful API endpoints for frontend-backend integration
+- **Visualizes** real-time stock data through modern React dashboard with TypeScript and advanced charting
+- **Displays** ML predictions, trading signals, and comprehensive statistical analysis
+- **Features** multi-tab interface: Overview, Advanced Analytics, Returns Analysis, Statistical Dashboard
+- **Provides** interactive features: search, filtering, stock comparison, technical indicators, risk metrics
+- **Includes** smart error handling with descriptive messages and missing data indicators
+- **Offers** responsive design with dark/light themes, mobile optimization, and professional data visualization
+- **Serves** RESTful API endpoints including advanced analytics with technical indicators
 
 ### 🏗️ Complete Platform Architecture
 
@@ -82,11 +84,13 @@ This platform provides a complete end-to-end solution for AI-powered stock marke
 
 🎯 **Production-Ready**: 50,000+ real market records, 100% DAG execution success rate, sub-second API response times  
 🚀 **GPU-Accelerated ML**: 5-10x faster XGBoost training with CUDA, 180+ physics-inspired technical indicators  
-🌐 **Modern Web Interface**: React 18 + TypeScript dashboard with real-time data, dark/light themes, mobile-responsive  
+🌐 **Advanced Web Interface**: React 18 + TypeScript with multi-tab analysis, technical indicators, statistical dashboards  
 📊 **Per-Stock Intelligence**: Individual XGBoost models for each stock with personalized trading signals  
+📈 **Professional Charting**: Interactive charts with moving averages, volume analysis, returns visualization, risk metrics  
 🔄 **Multi-Environment**: Separate dev/test/prod pipelines with independent ML training and database schemas  
 ⚡ **Real-Time Processing**: Live stock price updates, instant ML predictions, interactive data visualization  
-🛡️ **Enterprise-Grade**: Docker containerization, comprehensive logging, data quality validation, error recovery
+🛡️ **Enterprise-Grade**: Docker containerization, comprehensive logging, data quality validation, error recovery  
+🎨 **Smart UX**: Descriptive error handling, missing data indicators, responsive design, dark/light themes
 
 ## 📊 Data Model
 
@@ -244,19 +248,66 @@ make start
 # - Skip web application deployment
 ```
 
-**Option C: Web Application Only**  
+**Option C: Web Application Development Mode**  
 ```bash  
-# Start web app with existing database
-make web-start
+# 🔧 DEVELOPMENT MODE: Start web app with hot reload and debugging
+make dev-web-start
 
-# Or check web app status
-make web-status
+# Install/update web app dependencies
+make dev-web-install
 
-# View web app logs
-make web-logs
+# Check development status with comprehensive monitoring
+make dev-web-status
+
+# Restart development services after code changes
+make dev-web-restart
+
+# Stop development services
+make dev-web-stop
 ```
 
-### 3. Manual Step-by-Step Setup (Alternative)
+**Option D: Web Application Docker Production**
+```bash
+# 🐳 DOCKER PRODUCTION: Start containerized web application
+make web-start
+
+# Check production web app status
+make web-status
+
+# Build updated Docker images
+make web-build
+
+# View production web app logs
+make web-logs
+
+# Restart production web containers
+make web-restart
+```
+
+### 3. Service Management & Restart Options
+
+**🔄 Restart Services (Preserves Data)**
+```bash
+# Restart all Docker services while preserving database data
+make docker-restart
+
+# Restart infrastructure only (PostgreSQL, Airflow, pgAdmin)
+make restart
+
+# Restart everything including development web app
+make dev-restart
+```
+
+**🧹 Clean Restart (Deletes Data)**  
+```bash
+# ⚠️  WARNING: This will delete all database data and reinitialize schemas
+make docker-clean
+
+# Complete cleanup (removes containers, images, logs)
+make clean
+```
+
+### 4. Manual Step-by-Step Setup (Alternative)
 
 ```bash
 # Start PostgreSQL and Airflow containers
@@ -278,7 +329,7 @@ uv run python -m stock_etl.cli database test-connection --schema dev_stock_data
 make extract-credentials
 ```
 
-### 4. Run ETL Pipeline
+### 5. Run ETL Pipeline
 
 ```bash
 # Recommended: Use Makefile commands for automated pipeline execution
@@ -302,7 +353,7 @@ make trigger-prod-dag
 # stock-etl load sample --schema dev_stock_data
 ```
 
-### 5. Access Web Interfaces
+### 6. Access Web Interfaces
 
 **🚀 Airflow Dashboard**: http://localhost:8080
 - **Username**: `admin`
@@ -321,8 +372,21 @@ make trigger-prod-dag
 **🌐 Stock Analysis Web Application**: 
 - **Frontend Dashboard**: http://localhost:3000 (React + TypeScript)
 - **Backend API**: http://localhost:3001 (Express.js + PostgreSQL)
-- **Features**: Real-time stock data, ML predictions, interactive charts, dark/light mode
-- **API Endpoints**: `/api/stocks`, `/api/stocks/:symbol`, `/api/predictions/:symbol`, `/api/models`
+- **Features**: 
+  - **Multi-tab Stock Analysis**: Overview, Advanced Analytics, Returns, Statistics
+  - **Advanced Charting**: Technical indicators, moving averages, volume analysis
+  - **Statistical Dashboard**: Risk metrics, performance indicators, comprehensive insights
+  - **Smart Error Handling**: Descriptive error messages and missing data indicators
+  - **Real-time Data**: Live stock prices with interactive charts
+  - **ML Integration**: Trading signals and model confidence scores
+  - **Responsive Design**: Dark/light themes, mobile-optimized
+- **API Endpoints**: 
+  - `/api/stocks` - Stock list with metadata
+  - `/api/stocks/:symbol?timeframe=3M` - Stock details with OHLCV history  
+  - `/api/stocks/:symbol/analytics?timeframe=3M` - Advanced analytics with technical indicators
+  - `/api/predictions/:symbol?limit=30` - ML predictions and trading signals
+  - `/api/models` - ML model performance metrics
+  - `/health` - Backend health check
 
 ## 📋 CLI Commands
 
@@ -395,8 +459,13 @@ npm run build                       # Production build for deployment
 npm test                            # Run test suite
 npm run eject                       # Eject from Create React App (irreversible)
 
-# Full Stack Development
+# Full Stack Development (Recommended with Makefile)
 make start                          # Start infrastructure (PostgreSQL + Airflow)
+make dev-web-install                # Install all web app dependencies
+make dev-web-start                  # Start both backend and frontend with hot reload
+make dev-web-status                 # Check comprehensive development status
+
+# Alternative Manual Development
 cd web-app/backend && npm run dev & # Backend with hot reload (background)
 cd web-app/frontend && npm start    # Frontend with hot reload
 
@@ -404,6 +473,7 @@ cd web-app/frontend && npm start    # Frontend with hot reload
 curl http://localhost:3001/health                    # Backend health check
 curl http://localhost:3001/api/stocks                # Test stock data API
 curl "http://localhost:3001/api/stocks/XTB?timeframe=3M" # Test stock details API
+curl "http://localhost:3001/api/stocks/XTB/analytics?timeframe=3M" # Advanced analytics
 # Frontend: http://localhost:3000 (interactive dashboard)
 ```
 
@@ -452,12 +522,26 @@ curl -s "http://localhost:3001/api/stocks/XTB?timeframe=1M"
 #   ]
 # }
 
-# 5. Test Different Timeframes for Stock Details
-curl -s "http://localhost:3001/api/stocks/XTB?timeframe=3M"  # 3 months (default)
-curl -s "http://localhost:3001/api/stocks/XTB?timeframe=6M"  # 6 months
-curl -s "http://localhost:3001/api/stocks/XTB?timeframe=1Y"  # 1 year
+# 5. Get Advanced Analytics with Technical Indicators
+curl -s "http://localhost:3001/api/stocks/XTB/analytics?timeframe=3M"
+# Expected Result: Stock data with advanced analytics
+# {
+#   "symbol":"XTB","timeframe":"3M",
+#   "data":[
+#     {"date":"2025-05-23T00:00:00.000Z","open":"55.800000","high":"56.300000",
+#      "low":"55.300000","close":"56.000000","volume":"184523",
+#      "daily_return":"0.358","ma_20":"54.820","ma_50":"53.745",
+#      "volume_ma_20":"156832.5","volatility_20d":"2.145"},
+#     ... (additional records with technical indicators)
+#   ]
+# }
 
-# 6. Get ML Model Performance Metrics (Production Models)
+# 6. Test Different Timeframes for Analytics
+curl -s "http://localhost:3001/api/stocks/XTB/analytics?timeframe=1M"  # 1 month
+curl -s "http://localhost:3001/api/stocks/XTB/analytics?timeframe=6M"  # 6 months
+curl -s "http://localhost:3001/api/stocks/CDR/analytics?timeframe=3M"  # Different stock
+
+# 7. Get ML Model Performance Metrics (Production Models)
 curl -s http://localhost:3001/api/models
 # Expected Result: 10 active ML models sorted by ROC-AUC performance
 # [
@@ -474,7 +558,7 @@ curl -s http://localhost:3001/api/models
 #   ... (8 more models with decreasing ROC-AUC scores)
 # ]
 
-# 7. Get ML Predictions for Stock (Recent Trading Signals)
+# 8. Get ML Predictions for Stock (Recent Trading Signals)
 curl -s "http://localhost:3001/api/predictions/XTB?limit=5"
 # Expected Result: 5 most recent ML predictions with trading signals
 # [
@@ -490,11 +574,11 @@ curl -s "http://localhost:3001/api/predictions/XTB?limit=5"
 #   ... (3 more recent predictions)
 # ]
 
-# 8. Test Different Stocks and Prediction Limits
+# 9. Test Different Stocks and Prediction Limits
 curl -s "http://localhost:3001/api/predictions/CDR?limit=10"  # CDR stock, 10 predictions
 curl -s "http://localhost:3001/api/predictions/BDX?limit=3"   # BDX stock, 3 predictions
 
-# 9. Frontend Accessibility Check
+# 10. Frontend Accessibility Check
 curl -s -I http://localhost:3000 | head -5
 # Expected Result: HTTP 200 with CORS headers
 # HTTP/1.1 200 OK
@@ -503,7 +587,7 @@ curl -s -I http://localhost:3000 | head -5
 # Access-Control-Allow-Methods: *
 # Access-Control-Allow-Headers: *
 
-# 10. Error Handling Tests
+# 11. Error Handling Tests
 curl -s http://localhost:3001/api/stocks/INVALID_SYMBOL
 # Expected Result: {"error": "Stock not found"} with HTTP 404
 

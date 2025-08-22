@@ -193,7 +193,10 @@ function AppContent() {
                       Latest Data
                     </dt>
                     <dd className="text-lg font-medium text-gray-900 dark:text-white">
-                      {stocks[0]?.latest_date || 'N/A'}
+                      {stocks[0]?.latest_date ? 
+                        new Date(stocks[0].latest_date).toLocaleDateString('pl-PL') :
+                        <span className="text-red-500">⚠️ No data available</span>
+                      }
                     </dd>
                   </dl>
                 </div>
@@ -268,7 +271,10 @@ function AppContent() {
                         <div className="flex items-center space-x-4">
                           <div className="text-right">
                             <div className="text-sm text-gray-900 dark:text-white">
-                              Price: {stock.latest_price ? `${stock.latest_price} PLN` : 'N/A'}
+                              Price: {stock.latest_price ? 
+                                `${parseFloat(stock.latest_price.toString()).toFixed(2)} PLN` : 
+                                <span className="text-amber-600 dark:text-amber-400">⚠️ Price unavailable</span>
+                              }
                             </div>
                             <div className="text-sm text-gray-500 dark:text-gray-400">
                               {stock.total_records.toLocaleString()} records

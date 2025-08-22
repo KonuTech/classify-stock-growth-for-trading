@@ -127,7 +127,9 @@ uv run python -m stock_etl.cli pipeline --schema dev_stock_data
 make help                    # Show all available commands
 make start                   # Complete deployment (recommended)
 make stop                    # Stop all services
-make restart                 # Restart with complete setup
+make restart                 # Restart infrastructure only (Docker services)
+make docker-restart          # Restart ALL Docker services (preserves data)
+make docker-clean            # CLEAN restart with database reinitialization (deletes data)
 make clean                   # Stop and remove all data/logs
 
 # Environment management
@@ -137,6 +139,24 @@ make trigger-prod-dag        # Trigger production ETL DAG
 make setup-airflow           # Setup Airflow connections only
 make fix-schema-permissions  # Fix database permissions
 make extract-credentials     # Extract service credentials to .env
+
+# Web Application (Docker Production)
+make start-with-web          # Start complete infrastructure WITH Docker web application
+make web-start               # Start Docker web application services only
+make web-stop                # Stop Docker web application services
+make web-restart             # Restart Docker web application with latest changes
+make web-build               # Build web application Docker images
+make web-status              # Show web application status and URLs
+
+# Web Application (Development - Local)
+make dev-restart             # Restart EVERYTHING (infrastructure + development web app)
+make dev-web-install         # Install frontend dependencies  
+make dev-web-start           # Start backend and frontend in development mode
+make dev-web-backend         # Start only backend API server
+make dev-web-frontend        # Start only frontend development server
+make dev-web-restart         # Restart development web services only
+make dev-web-stop            # Stop development web services
+make dev-web-status          # Show development web services status
 ```
 
 ### Code Quality
@@ -191,6 +211,12 @@ npm run build                       # Production build
 npm test                            # Run test suite
 # Frontend available at: http://localhost:3000
 
+# Makefile Development Commands (Recommended)
+make dev-web-install                 # Install all dependencies (backend + frontend)
+make dev-web-start                   # Start both services in development mode
+make dev-web-status                  # Show comprehensive development status
+make dev-web-restart                 # Restart both development services
+
 # Web Application Stack Status Check
 curl http://localhost:3001/health    # Backend health check
 curl http://localhost:3001/api/stocks # Test API endpoint
@@ -201,6 +227,7 @@ curl -s http://localhost:3001/health                                # Health che
 curl -s http://localhost:3001/test-db                              # Database connectivity  
 curl -s http://localhost:3001/api/stocks                           # All stocks list
 curl -s "http://localhost:3001/api/stocks/XTB?timeframe=1M"        # Stock details with OHLCV
+curl -s "http://localhost:3001/api/stocks/XTB/analytics?timeframe=3M" # Advanced analytics
 curl -s http://localhost:3001/api/models                           # ML model performance
 curl -s "http://localhost:3001/api/predictions/XTB?limit=5"        # ML trading signals
 curl -s -I http://localhost:3000 | head -5                        # Frontend accessibility
@@ -495,9 +522,14 @@ The web application provides an intuitive interface for the stock analysis platf
 - **State Management**: React hooks (useState, useEffect, useMemo) + Context API
 - **Key Components**:
   - `src/App.tsx`: Main application with stock dashboard and filtering
-  - `src/components/StockDetail.tsx`: Individual stock analysis modal
+  - `src/components/StockDetail.tsx`: Individual stock analysis modal with tabbed interface
   - `src/components/StockComparison.tsx`: Side-by-side stock comparison
   - `src/components/StockFilter.tsx`: Search and sorting functionality
+  - `src/components/charts/`: Advanced charting components with Recharts
+    - `AdvancedPriceChart.tsx`: Price analysis with moving averages and volume
+    - `ReturnsChart.tsx`: Daily returns visualization with statistics
+    - `StatisticsChart.tsx`: Comprehensive statistical analysis dashboard
+  - `src/components/ui/`: Reusable UI components (Button, Card, Skeleton)
   - `src/hooks/useStockData.ts`: Custom hook for API data fetching
 
 ### Backend Architecture (`web-app/backend/`)
@@ -507,9 +539,11 @@ The web application provides an intuitive interface for the stock analysis platf
 - **Key Endpoints**:
   - `GET /api/stocks` - Stock list with metadata (symbol, name, price, record count)
   - `GET /api/stocks/:symbol?timeframe=3M` - Stock details with OHLCV history
+  - `GET /api/stocks/:symbol/analytics?timeframe=3M` - Advanced analytics with technical indicators
   - `GET /api/predictions/:symbol?limit=30` - ML predictions and trading signals  
   - `GET /api/models` - ML model performance metrics (ROC-AUC, accuracy)
   - `GET /health` - Health check endpoint
+  - `GET /test-db` - Database connectivity test
 
 ### Database Integration
 - **Production Schema**: Connects directly to `prod_stock_data` schema
@@ -519,7 +553,13 @@ The web application provides an intuitive interface for the stock analysis platf
 
 ### Key Features
 - **Interactive Dashboard**: Real-time portfolio overview with search and filtering
-- **Stock Analysis**: Click-through details with historical price charts (1M, 3M, 6M, 1Y timeframes)  
+- **Advanced Stock Analysis**: Multi-tab interface with comprehensive analysis
+  - Overview: Basic price charts and recent data table
+  - Advanced Analytics: Technical indicators, moving averages, volume analysis
+  - Returns Analysis: Daily returns visualization with statistical summaries
+  - Statistical Analysis: Risk metrics, performance indicators, comprehensive insights
+- **Enhanced Data Visualization**: Professional charts using Recharts library
+- **Smart Error Handling**: Descriptive error messages and missing data indicators
 - **ML Predictions**: Display of trading signals and model confidence scores
 - **Responsive Design**: Mobile-optimized interface with dark/light theme toggle
 - **Watchlist Management**: Personal stock tracking with real-time updates
@@ -691,6 +731,23 @@ test_single_stock_pipeline('XTB', include_ml=True)
 - **Class Imbalance**: Uses `scale_pos_weight` parameter in XGBoost instead of SMOTE (inappropriate for time series)
 - **Model Selection**: XGBoost chosen for superior performance on tabular data and native missing value handling
 - **Backtesting Framework**: Walk-forward analysis with realistic trading costs
+
+### Web Application Design Patterns
+- **Component Architecture**: Modular React components with clear separation of concerns
+- **Data Flow**: Unidirectional data flow with React hooks and context API
+- **Error Boundaries**: Graceful error handling with descriptive user feedback
+- **Type Safety**: Full TypeScript coverage for runtime error prevention
+- **State Management**: Local component state with selective global state via Context API
+- **API Integration**: Custom hooks for data fetching with loading and error states
+- **Chart Architecture**: Reusable chart components with consistent styling and data handling
+- **Responsive Design**: Mobile-first approach with Tailwind CSS utility classes
+
+### Operational Design Patterns
+- **Environment Separation**: Distinct dev/test/prod environments with isolated data
+- **Service Orchestration**: Docker Compose for local development, production-ready containers
+- **Configuration Management**: Environment variables with sensible defaults
+- **Health Monitoring**: Comprehensive health checks and status reporting
+- **Data Preservation vs Clean Restart**: Clear distinction between `docker-restart` (preserves data) and `docker-clean` (deletes data)
 
 ## Trading Calendar & DAG Utilities
 
