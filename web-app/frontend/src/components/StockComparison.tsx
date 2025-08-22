@@ -20,7 +20,7 @@ const CHART_COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6'];
 
 export default function StockComparison({ initialStocks = [], onClose }: StockComparisonProps) {
   const [selectedStocks, setSelectedStocks] = useState<string[]>(initialStocks);
-  const [timeframe, setTimeframe] = useState<'1M' | '3M' | '6M' | '1Y'>('3M');
+  const [timeframe, setTimeframe] = useState<'1M' | '3M' | '6M' | '1Y' | 'MAX'>('1Y');
   const [availableStocks, setAvailableStocks] = useState<Stock[]>([]);
   const [loadingStocks, setLoadingStocks] = useState(true);
 
@@ -57,6 +57,11 @@ export default function StockComparison({ initialStocks = [], onClose }: StockCo
       document.removeEventListener('keydown', handleEscapeKey);
     };
   }, [onClose]);
+
+  // Helper function to clean stock names
+  const cleanStockName = (name: string) => {
+    return name.replace(/ Stock$/, '').replace(/ stock$/, '');
+  };
 
   // Fetch data for all selected stocks manually (can't use hooks in loops)
   const [stockData, setStockData] = useState<{[key: string]: any}>({});
@@ -103,29 +108,24 @@ export default function StockComparison({ initialStocks = [], onClose }: StockCo
       .filter(hook => hook.data?.price_history && hook.data.price_history.length > 0)
       .map(hook => ({
         symbol: hook.symbol,
-        prices: hook.data!.price_history!
+        prices: hook.data!.price_history!.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
       }));
 
     if (allData.length === 0) return [];
 
-    // Find common dates across all stocks using a simpler approach
-    let commonDates = new Set<string>();
-    
-    allData.forEach((stock, index) => {
-      const stockDates = new Set<string>(stock.prices.map((p: any) => p.date));
-      
-      if (index === 0) {
-        // First stock - use all its dates
-        commonDates = stockDates;
-      } else {
-        // Filter to keep only dates that exist in both sets
-        commonDates = new Set<string>(
-          Array.from(commonDates).filter(date => stockDates.has(date))
-        );
-      }
+    // Find all unique dates across all stocks (union instead of intersection)
+    const allDatesSet = new Set<string>();
+    allData.forEach(stock => {
+      stock.prices.forEach((p: any) => allDatesSet.add(p.date));
     });
 
-    const sortedDates = Array.from(commonDates).sort();
+    const sortedDates = Array.from(allDatesSet).sort();
+
+    // For each stock, find its first available price as baseline (0% growth point)
+    const stockBaselines: {[symbol: string]: number} = {};
+    allData.forEach(stock => {
+      stockBaselines[stock.symbol] = stock.prices[0].close;
+    });
 
     // Create normalized percentage change data
     return sortedDates.map(date => {
@@ -134,9 +134,14 @@ export default function StockComparison({ initialStocks = [], onClose }: StockCo
       allData.forEach(stock => {
         const priceData = stock.prices.find((p: any) => p.date === date);
         if (priceData) {
-          const firstPrice = stock.prices.find((p: any) => sortedDates.includes(p.date))?.close || priceData.close;
-          const percentChange = ((priceData.close - firstPrice) / firstPrice) * 100;
+          // Calculate percentage change from the stock's own baseline (first available price)
+          const baselinePrice = stockBaselines[stock.symbol];
+          const percentChange = ((priceData.close - baselinePrice) / baselinePrice) * 100;
           dataPoint[stock.symbol] = percentChange;
+        } else {
+          // If stock doesn't have data for this date, don't include it in the chart for this date
+          // This allows stocks with different trading histories to be compared properly
+          dataPoint[stock.symbol] = undefined;
         }
       });
       
@@ -164,17 +169,17 @@ export default function StockComparison({ initialStocks = [], onClose }: StockCo
         
         return {
           symbol: hook.symbol,
-          name: hook.data!.name,
-          totalReturn: totalReturn.toFixed(2),
-          volatility: volatility.toFixed(2),
+          name: cleanStockName(hook.data!.name),
+          totalReturn: totalReturn.toFixed(1),
+          volatility: volatility.toFixed(1),
           currentPrice: lastPrice,
-          priceChange: (lastPrice - firstPrice).toFixed(2)
+          priceChange: (lastPrice - firstPrice).toFixed(1)
         };
       });
   }, [stockDataHooks]);
 
   const addStock = useCallback((symbol: string) => {
-    if (!selectedStocks.includes(symbol) && selectedStocks.length < 5) {
+    if (!selectedStocks.includes(symbol)) {
       setSelectedStocks(prev => [...prev, symbol]);
     }
   }, [selectedStocks]);
@@ -190,12 +195,10 @@ export default function StockComparison({ initialStocks = [], onClose }: StockCo
     });
   };
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('pl-PL', {
-      style: 'currency',
-      currency: 'PLN',
-      minimumFractionDigits: 2
-    }).format(price);
+  const formatPrice = (price: number | string) => {
+    const numPrice = typeof price === 'string' ? parseFloat(price) : price;
+    if (isNaN(numPrice)) return 'N/A';
+    return `${numPrice.toFixed(2)} PLN`;
   };
 
   const isLoading = stockDataHooks.some(hook => hook.loading);
@@ -217,72 +220,87 @@ export default function StockComparison({ initialStocks = [], onClose }: StockCo
         <div className="p-6 space-y-6">
           {/* Stock Selection */}
           <Card className="p-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                Compare stocks:
-              </span>
-              
-              {/* Selected stocks */}
-              {selectedStocks.map(symbol => (
-                <div
-                  key={symbol}
-                  className="flex items-center px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full text-sm"
-                >
-                  {symbol}
-                  <button
-                    onClick={() => removeStock(symbol)}
-                    className="ml-2 hover:text-blue-600 dark:hover:text-blue-300"
-                  >
-                    <XMarkIcon className="h-4 w-4" />
-                  </button>
+            <div className="space-y-3">
+              {/* Header with Add stock button and Timeframe selector */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Compare stocks:
+                  </span>
+                  
+                  {/* Fixed position Add stock dropdown */}
+                  {!loadingStocks && (
+                    <select
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          addStock(e.target.value);
+                          e.target.value = '';
+                        }
+                      }}
+                      className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                      defaultValue=""
+                    >
+                      <option value="">+ Add stock</option>
+                      {availableStocks
+                        .filter(stock => !selectedStocks.includes(stock.symbol))
+                        .map(stock => (
+                          <option key={stock.symbol} value={stock.symbol}>
+                            {stock.symbol} - {cleanStockName(stock.name)}
+                          </option>
+                        ))}
+                    </select>
+                  )}
+                  
+                  {loadingStocks && (
+                    <div className="text-sm text-gray-500 dark:text-gray-400">
+                      Loading stocks...
+                    </div>
+                  )}
                 </div>
-              ))}
-              
-              {/* Add stock dropdown */}
-              {selectedStocks.length < 5 && !loadingStocks && (
-                <select
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      addStock(e.target.value);
-                      e.target.value = '';
-                    }
-                  }}
-                  className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
-                  defaultValue=""
-                >
-                  <option value="">+ Add stock</option>
-                  {availableStocks
-                    .filter(stock => !selectedStocks.includes(stock.symbol))
-                    .map(stock => (
-                      <option key={stock.symbol} value={stock.symbol}>
-                        {stock.symbol} - {stock.name}
-                      </option>
-                    ))}
-                </select>
-              )}
-              
-              {loadingStocks && (
-                <div className="text-sm text-gray-500 dark:text-gray-400">
-                  Loading stocks...
+                
+                {/* Timeframe selector */}
+                <div className="flex space-x-2">
+                  {(['1M', '3M', '6M', '1Y', 'MAX'] as const).map((tf) => (
+                    <button
+                      key={tf}
+                      onClick={() => setTimeframe(tf)}
+                      className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                        timeframe === tf
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+                      }`}
+                    >
+                      {tf}
+                    </button>
+                  ))}
                 </div>
-              )}
-              
-              {/* Timeframe selector */}
-              <div className="ml-auto flex space-x-2">
-                {(['1M', '3M', '6M', '1Y'] as const).map((tf) => (
-                  <button
-                    key={tf}
-                    onClick={() => setTimeframe(tf)}
-                    className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                      timeframe === tf
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
-                    }`}
-                  >
-                    {tf}
-                  </button>
-                ))}
               </div>
+              
+              {/* Selected stocks in rows of 5 */}
+              {selectedStocks.length > 0 && (
+                <div className="space-y-2">
+                  {Array.from({ length: Math.ceil(selectedStocks.length / 5) }, (_, rowIndex) => (
+                    <div key={rowIndex} className="flex flex-wrap gap-2">
+                      {selectedStocks
+                        .slice(rowIndex * 5, (rowIndex + 1) * 5)
+                        .map(symbol => (
+                          <div
+                            key={symbol}
+                            className="flex items-center px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full text-sm"
+                          >
+                            {symbol}
+                            <button
+                              onClick={() => removeStock(symbol)}
+                              className="ml-2 hover:text-blue-600 dark:hover:text-blue-300"
+                            >
+                              <XMarkIcon className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </Card>
 
@@ -328,11 +346,11 @@ export default function StockComparison({ initialStocks = [], onClose }: StockCo
                           tickFormatter={formatDate}
                         />
                         <YAxis 
-                          tickFormatter={(value) => `${value.toFixed(1)}%`}
+                          tickFormatter={(value) => `${Math.round(value).toFixed(0)}%`}
                         />
                         <Tooltip 
                           labelFormatter={(value) => new Date(value).toLocaleDateString('pl-PL')}
-                          formatter={(value: number) => [`${value.toFixed(2)}%`, 'Return']}
+                          formatter={(value: number) => [`${value.toFixed(1)}%`, 'Return']}
                         />
                         <Legend />
                         {selectedStocks.map((symbol, index) => (

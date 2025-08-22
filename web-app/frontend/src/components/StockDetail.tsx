@@ -141,16 +141,25 @@ export default function StockDetail({ symbol, onClose }: StockDetailProps) {
     }
   };
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('pl-PL', {
-      style: 'currency',
-      currency: 'PLN',
-      minimumFractionDigits: 2
-    }).format(price);
+  const formatPrice = (price: number | string) => {
+    const numPrice = typeof price === 'string' ? parseFloat(price) : price;
+    if (isNaN(numPrice)) return 'N/A';
+    return `${numPrice.toFixed(2)} PLN`;
+  };
+
+  const formatPriceInteger = (price: number | string) => {
+    const numPrice = typeof price === 'string' ? parseFloat(price) : price;
+    if (isNaN(numPrice)) return 'N/A';
+    return `${Math.round(numPrice)} PLN`;
   };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('pl-PL');
+  };
+
+  // Helper function to clean stock names
+  const cleanStockName = (name: string) => {
+    return name.replace(/ Stock$/, '').replace(/ stock$/, '');
   };
 
   const calculatePriceChange = () => {
@@ -199,7 +208,7 @@ export default function StockDetail({ symbol, onClose }: StockDetailProps) {
         <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
           <div>
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{stockData.symbol}</h2>
-            <p className="text-gray-600 dark:text-gray-300">{stockData.name}</p>
+            <p className="text-gray-600 dark:text-gray-300">{cleanStockName(stockData.name)}</p>
             <div className="flex space-x-4 text-xs text-gray-500 dark:text-gray-400 mt-1">
               <span>⌨️ TAB: Next tab</span>
               <span>ESC: Close</span>
@@ -242,7 +251,7 @@ export default function StockDetail({ symbol, onClose }: StockDetailProps) {
                   <span className={priceChange.change >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
                     {priceChange.change >= 0 ? '+' : ''}{formatPrice(priceChange.change)}
                     <span className="text-sm ml-1">
-                      ({priceChange.changePercent >= 0 ? '+' : ''}{priceChange.changePercent.toFixed(2)}%)
+                      ({priceChange.changePercent >= 0 ? '+' : ''}{priceChange.changePercent.toFixed(1)}%)
                     </span>
                   </span>
                 ) : (
@@ -302,7 +311,7 @@ export default function StockDetail({ symbol, onClose }: StockDetailProps) {
                         />
                         <YAxis 
                           domain={['dataMin - 1', 'dataMax + 1']}
-                          tickFormatter={formatPrice}
+                          tickFormatter={formatPriceInteger}
                         />
                         <Tooltip 
                           labelFormatter={(value) => formatDate(value)}
