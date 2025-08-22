@@ -41,10 +41,43 @@ export default function StockComparison({ initialStocks = [], onClose }: StockCo
     fetchAvailableStocks();
   }, []);
 
-  // Fetch data for all selected stocks using our custom hook
+  // Fetch data for all selected stocks manually (can't use hooks in loops)
+  const [stockData, setStockData] = useState<{[key: string]: any}>({});
+  const [loading, setLoading] = useState<{[key: string]: boolean}>({});
+
+  useEffect(() => {
+    const fetchStockData = async () => {
+      const newLoading: {[key: string]: boolean} = {};
+      const newData: {[key: string]: any} = {};
+      
+      for (const symbol of selectedStocks) {
+        newLoading[symbol] = true;
+        try {
+          const response = await fetch(`http://localhost:3001/api/stocks/${symbol}?timeframe=${timeframe}`);
+          if (response.ok) {
+            newData[symbol] = await response.json();
+          }
+        } catch (error) {
+          console.error(`Error fetching data for ${symbol}:`, error);
+        }
+        newLoading[symbol] = false;
+      }
+      
+      setStockData(newData);
+      setLoading(newLoading);
+    };
+
+    if (selectedStocks.length > 0) {
+      fetchStockData();
+    }
+  }, [selectedStocks, timeframe]);
+
+  // Create stockDataHooks-compatible format for backward compatibility
   const stockDataHooks = selectedStocks.map(symbol => ({
     symbol,
-    ...useStockData(symbol, timeframe)
+    data: stockData[symbol],
+    loading: loading[symbol] || false,
+    error: null
   }));
 
   // Memoized calculation of comparison data
@@ -58,24 +91,33 @@ export default function StockComparison({ initialStocks = [], onClose }: StockCo
 
     if (allData.length === 0) return [];
 
-    // Find common dates across all stocks
-    const allDates = allData.reduce((dates, stock) => {
-      const stockDates = new Set(stock.prices.map(p => p.date));
-      return dates.size === 0 
-        ? stockDates 
-        : new Set([...dates].filter(date => stockDates.has(date)));
-    }, new Set<string>());
+    // Find common dates across all stocks using a simpler approach
+    let commonDates = new Set<string>();
+    
+    allData.forEach((stock, index) => {
+      const stockDates = new Set<string>(stock.prices.map((p: any) => p.date));
+      
+      if (index === 0) {
+        // First stock - use all its dates
+        commonDates = stockDates;
+      } else {
+        // Filter to keep only dates that exist in both sets
+        commonDates = new Set<string>(
+          Array.from(commonDates).filter(date => stockDates.has(date))
+        );
+      }
+    });
 
-    const sortedDates = Array.from(allDates).sort();
+    const sortedDates = Array.from(commonDates).sort();
 
     // Create normalized percentage change data
     return sortedDates.map(date => {
       const dataPoint: any = { date };
       
       allData.forEach(stock => {
-        const priceData = stock.prices.find(p => p.date === date);
+        const priceData = stock.prices.find((p: any) => p.date === date);
         if (priceData) {
-          const firstPrice = stock.prices.find(p => sortedDates.includes(p.date))?.close || priceData.close;
+          const firstPrice = stock.prices.find((p: any) => sortedDates.includes(p.date))?.close || priceData.close;
           const percentChange = ((priceData.close - firstPrice) / firstPrice) * 100;
           dataPoint[stock.symbol] = percentChange;
         }
@@ -96,11 +138,11 @@ export default function StockComparison({ initialStocks = [], onClose }: StockCo
         const totalReturn = ((lastPrice - firstPrice) / firstPrice) * 100;
         
         // Calculate volatility (standard deviation of daily returns)
-        const dailyReturns = prices.slice(1).map((price, i) => 
+        const dailyReturns = prices.slice(1).map((price: any, i: number) => 
           ((price.close - prices[i].close) / prices[i].close) * 100
         );
-        const avgReturn = dailyReturns.reduce((a, b) => a + b, 0) / dailyReturns.length;
-        const variance = dailyReturns.reduce((sum, ret) => sum + Math.pow(ret - avgReturn, 2), 0) / dailyReturns.length;
+        const avgReturn = dailyReturns.reduce((a: number, b: number) => a + b, 0) / dailyReturns.length;
+        const variance = dailyReturns.reduce((sum: number, ret: number) => sum + Math.pow(ret - avgReturn, 2), 0) / dailyReturns.length;
         const volatility = Math.sqrt(variance) * Math.sqrt(252); // Annualized
         
         return {

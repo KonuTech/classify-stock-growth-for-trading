@@ -145,9 +145,9 @@ app.get('/api/stocks/:symbol', async (req, res) => {
       FROM stock_prices sp
       JOIN base_instruments bi ON sp.stock_id = bi.id
       WHERE bi.symbol = $1 
-        AND sp.trading_date_local >= CURRENT_DATE - INTERVAL $2
+        AND sp.trading_date_local >= CURRENT_DATE - INTERVAL '1 day' * $2
       ORDER BY sp.trading_date_local ASC;
-    `, [symbol, `${daysBack} days`]);
+    `, [symbol, daysBack]);
     
     const response = {
       ...stockInfo.rows[0],

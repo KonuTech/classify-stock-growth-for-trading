@@ -1,22 +1,12 @@
-version: "3.8"
-services:
-  frontend:
-    build: ./frontend
-    ports:
-      - "3000:3000"
-    environment:
-      - REACT_APP_API_URL=http://localhost:3001
-    depends_on:
-      - backend
-  backend:
-    build: ./backend
-    ports:
-      - "3001:3001"
-    environment:
-      - NODE_ENV=development
-      - DB_HOST=host.docker.internal
-      - DB_PORT=5432
-      - DB_NAME=stock_data
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres
-      - DB_SCHEMA=prod_stock_data
+# DEPRECATED: This file is no longer used
+# Web application services are now integrated into the main docker-compose.yml
+# 
+# Use these commands instead:
+#   make start-with-web    # Start complete infrastructure with web app
+#   make web-start         # Start web app only
+#   make web-build         # Build web app images
+#   make web-status        # Check web app status
+#
+# Original configuration moved to main docker-compose.yml as:
+#   - web-backend service
+#   - web-frontend service

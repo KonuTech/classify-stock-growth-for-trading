@@ -58,6 +58,47 @@ services:
         airflow standalone
       "
 
+  # Web Application Services
+  web-backend:
+    build: ./web-app/backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=stock_data
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_SCHEMA=prod_stock_data
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./web-app/backend/src:/app/src
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  web-frontend:
+    build: ./web-app/frontend
+    depends_on:
+      web-backend:
+        condition: service_healthy
+    environment:
+      - REACT_APP_API_URL=http://localhost:3001
+      - CHOKIDAR_USEPOLLING=true
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./web-app/frontend/src:/app/src
+      - ./web-app/frontend/public:/app/public
+    stdin_open: true
+    tty: true
+
 volumes:
   postgres_data:
   pgadmin_data:

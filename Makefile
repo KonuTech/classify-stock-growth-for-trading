@@ -1,4 +1,4 @@
-.PHONY: start stop restart extract-credentials clean help init-dev init-test init-prod setup-airflow fix-schema-permissions trigger-dev-dag trigger-test-dag trigger-prod-dag trigger-dev-ml-dags trigger-test-ml-dags trigger-prod-ml-dags trigger-ml-stock web-init web-dev web-build web-start web-stop web-restart web-logs web-clean web-test web-status
+.PHONY: start stop restart extract-credentials clean help init-dev init-test init-prod setup-airflow fix-schema-permissions trigger-dev-dag trigger-test-dag trigger-prod-dag trigger-dev-ml-dags trigger-test-ml-dags trigger-prod-ml-dags trigger-ml-stock start-with-web web-start web-stop web-restart web-build web-logs web-clean web-test web-status
 
 # Default target
 help:
@@ -26,16 +26,15 @@ help:
 	@echo "  make trigger-prod-ml-dags  - Trigger all production ML DAGs (prod_ml_pipeline_*)"
 	@echo "  make trigger-ml-stock STOCK=XTB - Trigger ML training for specific stock (test & prod)"
 	@echo ""
-	@echo "🌐 Web Application:"
-	@echo "  make web-init           - Initialize React web application structure"
-	@echo "  make web-dev            - Start development servers (frontend + backend + database)"
-	@echo "  make web-build          - Build production web application"
-	@echo "  make web-start          - Start production web application (Docker)"
-	@echo "  make web-stop           - Stop web application containers"
+	@echo "🌐 Web Application (Integrated):"
+	@echo "  make start-with-web     - Start complete infrastructure WITH web application"
+	@echo "  make web-start          - Start web application services only (requires database)"
+	@echo "  make web-stop           - Stop web application services"
 	@echo "  make web-restart        - Restart web application with latest changes"
+	@echo "  make web-build          - Build web application Docker images"
 	@echo "  make web-logs           - Show web application logs"
 	@echo "  make web-clean          - Clean web application containers and images"
-	@echo "  make web-test           - Run web application tests"
+	@echo "  make web-test           - Test web application connectivity"
 	@echo "  make web-status         - Show web application status and URLs"
 	@echo ""
 	@echo "❓ Help:"
@@ -304,152 +303,54 @@ clean:
 	@rm -rf stock_etl/airflow_logs/etl/*.log
 	@echo "Complete cleanup finished"
 
-# ==================== WEB APPLICATION COMMANDS ====================
+# ==================== WEB APPLICATION COMMANDS (INTEGRATED) ====================
 
-# Initialize React web application structure
-web-init:
-	@echo "🚀 Initializing React web application structure..."
-	@if [ ! -d "web-app" ]; then \
-		echo "Creating web-app directory structure..."; \
-		mkdir -p web-app/frontend web-app/backend; \
-		echo "✅ Directory structure created"; \
-	else \
-		echo "✅ web-app directory already exists"; \
-	fi
-	@echo "Creating frontend (React + TypeScript)..."
-	@if [ ! -f "web-app/frontend/package.json" ]; then \
-		cd web-app/frontend && npx create-react-app . --template typescript --silent; \
-		cd web-app/frontend && npm install @tanstack/react-query recharts @headlessui/react @heroicons/react axios date-fns; \
-		cd web-app/frontend && npm install -D tailwindcss autoprefixer postcss @types/date-fns; \
-		cd web-app/frontend && npx tailwindcss init -p; \
-		echo "✅ Frontend dependencies installed"; \
-	else \
-		echo "✅ Frontend already initialized"; \
-	fi
-	@echo "Creating backend (Node.js + Express + TypeScript)..."
-	@if [ ! -f "web-app/backend/package.json" ]; then \
-		cd web-app/backend && npm init -y; \
-		cd web-app/backend && npm install express cors dotenv pg; \
-		cd web-app/backend && npm install -D typescript @types/node @types/express @types/cors @types/pg nodemon ts-node; \
-		cd web-app/backend && npx tsc --init; \
-		echo "✅ Backend dependencies installed"; \
-	else \
-		echo "✅ Backend already initialized"; \
-	fi
-	@echo "Creating Docker configuration..."
-	@if [ ! -f "web-app/docker-compose.yml" ]; then \
-		echo 'version: "3.8"' > web-app/docker-compose.yml; \
-		echo 'services:' >> web-app/docker-compose.yml; \
-		echo '  frontend:' >> web-app/docker-compose.yml; \
-		echo '    build: ./frontend' >> web-app/docker-compose.yml; \
-		echo '    ports:' >> web-app/docker-compose.yml; \
-		echo '      - "3000:3000"' >> web-app/docker-compose.yml; \
-		echo '    environment:' >> web-app/docker-compose.yml; \
-		echo '      - REACT_APP_API_URL=http://localhost:3001' >> web-app/docker-compose.yml; \
-		echo '    depends_on:' >> web-app/docker-compose.yml; \
-		echo '      - backend' >> web-app/docker-compose.yml; \
-		echo '  backend:' >> web-app/docker-compose.yml; \
-		echo '    build: ./backend' >> web-app/docker-compose.yml; \
-		echo '    ports:' >> web-app/docker-compose.yml; \
-		echo '      - "3001:3001"' >> web-app/docker-compose.yml; \
-		echo '    environment:' >> web-app/docker-compose.yml; \
-		echo '      - NODE_ENV=development' >> web-app/docker-compose.yml; \
-		echo '      - DB_HOST=host.docker.internal' >> web-app/docker-compose.yml; \
-		echo '      - DB_PORT=5432' >> web-app/docker-compose.yml; \
-		echo '      - DB_NAME=stock_data' >> web-app/docker-compose.yml; \
-		echo '      - DB_USER=postgres' >> web-app/docker-compose.yml; \
-		echo '      - DB_PASSWORD=postgres' >> web-app/docker-compose.yml; \
-		echo '      - DB_SCHEMA=prod_stock_data' >> web-app/docker-compose.yml; \
-		echo "✅ Docker Compose configuration created"; \
-	else \
-		echo "✅ Docker configuration already exists"; \
-	fi
-	@echo ""
-	@echo "🎯 React Web Application Initialized Successfully!"
-	@echo "📁 Structure: web-app/frontend (React) + web-app/backend (Node.js)"
-	@echo "🐳 Docker: web-app/docker-compose.yml configured"
-	@echo "📊 Database: Connected to prod_stock_data schema"
-	@echo ""
-	@echo "Next steps:"
-	@echo "  make web-dev    # Start development servers"
-	@echo "  make web-build  # Build production version"
-	@echo "  make web-start  # Start with Docker"
-
-# Start development servers (frontend + backend)
-web-dev:
-	@echo "🚀 Starting web application development servers..."
-	@if [ ! -d "web-app" ]; then \
-		echo "❌ Web application not initialized. Run 'make web-init' first."; \
-		exit 1; \
-	fi
-	@echo "Starting PostgreSQL database (if not running)..."
-	@docker-compose up -d postgres || echo "Database already running"
+# Start complete infrastructure WITH web application
+start-with-web:
+	@echo "🚀 Starting complete infrastructure with web application..."
+	docker-compose up -d postgres pgadmin airflow web-backend web-frontend
+	@echo "Waiting for services to initialize..."
+	@sleep 30
+	@echo "Setting up all database schemas..."
 	@sleep 5
-	@echo "Starting backend server..."
-	@cd web-app/backend && npm run dev &
-	@sleep 3
-	@echo "Starting frontend development server..."
-	@cd web-app/frontend && BROWSER=none npm start &
-	@sleep 5
-	@echo ""
-	@echo "✅ Development servers started!"
+	@echo "Initializing dev_stock_data schema..."
+	@uv run python -m stock_etl.cli database init-dev
+	@echo "Initializing test_stock_data schema..."
+	@uv run python -m stock_etl.cli database init-test
+	@echo "Initializing prod_stock_data schema with ML tables..."
+	@uv run python -m stock_etl.cli database init-prod
+	@make fix-schema-permissions
+	@make setup-airflow
+	@echo "✅ Complete infrastructure with web application ready!"
+	@echo "📊 Schemas: dev_stock_data ✅ test_stock_data ✅ prod_stock_data ✅"
 	@echo "🌐 Frontend: http://localhost:3000"
 	@echo "🔧 Backend API: http://localhost:3001"
-	@echo "📊 Database: prod_stock_data schema"
-	@echo ""
-	@echo "💡 Use Ctrl+C to stop development servers"
-	@echo "💡 Use 'make web-logs' to view logs"
+	@echo "🚀 Airflow UI: http://localhost:8080"
+	@echo "📊 pgAdmin: http://localhost:5050"
+	@echo "Waiting for Airflow to fully initialize credentials..."
+	@sleep 20
+	@make extract-credentials
 
-# Build production web application
-web-build:
-	@echo "🔨 Building production web application..."
-	@if [ ! -d "web-app" ]; then \
-		echo "❌ Web application not initialized. Run 'make web-init' first."; \
-		exit 1; \
-	fi
-	@echo "Building frontend..."
-	@cd web-app/frontend && npm run build
-	@echo "Building backend..."
-	@cd web-app/backend && npm run build || echo "Backend TypeScript compilation completed"
-	@echo "Building Docker images..."
-	@cd web-app && docker-compose build --no-cache
-	@echo ""
-	@echo "✅ Production build completed!"
-	@echo "🐳 Docker images built and ready for deployment"
-	@echo "🚀 Run 'make web-start' to start production containers"
-
-# Start production web application (Docker)
+# Start web application services only (requires existing database)
 web-start:
-	@echo "🚀 Starting production web application..."
-	@if [ ! -f "web-app/docker-compose.yml" ]; then \
-		echo "❌ Web application not initialized. Run 'make web-init' first."; \
-		exit 1; \
-	fi
+	@echo "🚀 Starting web application services..."
 	@echo "Ensuring database is available..."
 	@docker-compose up -d postgres
 	@sleep 10
-	@echo "Starting web application containers..."
-	@cd web-app && docker-compose up -d
+	@echo "Starting web application..."
+	@docker-compose up -d web-backend web-frontend
 	@sleep 15
 	@echo ""
-	@echo "✅ Production web application started!"
+	@echo "✅ Web application started!"
 	@make web-status
 
-# Stop web application containers
+# Stop web application services
 web-stop:
 	@echo "🛑 Stopping web application..."
-	@if [ -f "web-app/docker-compose.yml" ]; then \
-		cd web-app && docker-compose down; \
-		echo "✅ Web application stopped"; \
-	else \
-		echo "⚠️ Web application not found"; \
-	fi
-	@echo "Stopping development processes..."
-	@pkill -f "npm start" 2>/dev/null || echo "No frontend dev server running"
-	@pkill -f "npm run dev" 2>/dev/null || echo "No backend dev server running"
-	@pkill -f "node.*3001" 2>/dev/null || echo "No Node.js processes on port 3001"
+	@docker-compose stop web-frontend web-backend
+	@echo "✅ Web application stopped"
 
-# Restart web application with latest changes
+# Restart web application services
 web-restart:
 	@echo "🔄 Restarting web application..."
 	@make web-stop
@@ -458,49 +359,44 @@ web-restart:
 	@make web-start
 	@echo "✅ Web application restarted with latest changes"
 
+# Build web application Docker images
+web-build:
+	@echo "🔨 Building web application Docker images..."
+	@echo "Building backend image..."
+	@docker-compose build web-backend
+	@echo "Building frontend image..."
+	@docker-compose build web-frontend
+	@echo "✅ Web application images built successfully"
+
 # Show web application logs
 web-logs:
 	@echo "📋 Web Application Logs"
 	@echo "======================="
-	@if [ -f "web-app/docker-compose.yml" ]; then \
-		echo "🌐 Frontend logs:"; \
-		cd web-app && docker-compose logs --tail=20 frontend 2>/dev/null || echo "Frontend container not running"; \
-		echo ""; \
-		echo "🔧 Backend logs:"; \
-		cd web-app && docker-compose logs --tail=20 backend 2>/dev/null || echo "Backend container not running"; \
-	else \
-		echo "⚠️ Docker containers not running. Check development servers:"; \
-		echo "Frontend: http://localhost:3000"; \
-		echo "Backend: http://localhost:3001"; \
-	fi
+	@echo "🌐 Frontend logs:"
+	@docker-compose logs --tail=20 web-frontend 2>/dev/null || echo "Frontend container not running"
+	@echo ""
+	@echo "🔧 Backend logs:"
+	@docker-compose logs --tail=20 web-backend 2>/dev/null || echo "Backend container not running"
 
 # Clean web application containers and images
 web-clean:
 	@echo "🧹 Cleaning web application..."
 	@make web-stop
 	@echo "Removing web application containers..."
-	@cd web-app && docker-compose rm -f 2>/dev/null || echo "No containers to remove"
+	@docker-compose rm -f web-frontend web-backend 2>/dev/null || echo "No containers to remove"
 	@echo "Removing web application images..."
-	@docker rmi web-app_frontend web-app_backend 2>/dev/null || echo "No custom images to remove"
-	@echo "Cleaning build artifacts..."
-	@rm -rf web-app/frontend/build 2>/dev/null || echo "No frontend build to clean"
-	@rm -rf web-app/backend/dist 2>/dev/null || echo "No backend build to clean"
-	@rm -rf web-app/frontend/node_modules/.cache 2>/dev/null || echo "No cache to clean"
+	@docker rmi classify-stock-growth-for-trading_web-frontend classify-stock-growth-for-trading_web-backend 2>/dev/null || echo "No custom images to remove"
 	@echo "✅ Web application cleaned"
 
 # Run web application tests
 web-test:
 	@echo "🧪 Running web application tests..."
-	@if [ ! -d "web-app" ]; then \
-		echo "❌ Web application not initialized. Run 'make web-init' first."; \
-		exit 1; \
-	fi
-	@echo "Running frontend tests..."
-	@cd web-app/frontend && npm test -- --coverage --watchAll=false || echo "Frontend tests completed"
-	@echo "Running backend tests..."
-	@cd web-app/backend && npm test || echo "Backend tests completed"
-	@echo "Testing API connectivity..."
-	@curl -s http://localhost:3001/health || echo "Backend not running on port 3001"
+	@echo "Testing backend health..."
+	@curl -s -f http://localhost:3001/health || echo "❌ Backend health check failed"
+	@echo "Testing frontend availability..."
+	@curl -s -f http://localhost:3000 || echo "❌ Frontend not accessible"
+	@echo "Testing API endpoints..."
+	@curl -s -f http://localhost:3001/api/stocks || echo "❌ Stocks API endpoint failed"
 	@echo "✅ Web application tests completed"
 
 # Show web application status and URLs
@@ -518,17 +414,19 @@ web-status:
 	@docker-compose exec postgres pg_isready -U postgres -d stock_data 2>/dev/null | sed 's/^/  /' || echo "  PostgreSQL:        Not running"
 	@echo ""
 	@echo "🐳 Docker Container Status:"
-	@cd web-app && docker-compose ps 2>/dev/null | grep -E "(frontend|backend)" | sed 's/^/  /' || echo "  No containers running"
+	@docker-compose ps | grep -E "(web-frontend|web-backend)" | sed 's/^/  /' || echo "  No web containers running"
 	@echo ""
 	@echo "🔗 Access URLs:"
 	@echo "  Frontend App:      http://localhost:3000"
 	@echo "  Backend API:       http://localhost:3001"
 	@echo "  API Health:        http://localhost:3001/health"
+	@echo "  API Stocks:        http://localhost:3001/api/stocks"
 	@echo "  Database:          postgresql://postgres:postgres@localhost:5432/stock_data"
 	@echo "  Schema:            prod_stock_data"
 	@echo ""
 	@echo "💡 Available Commands:"
-	@echo "  make web-dev       # Start development"
-	@echo "  make web-build     # Build production"
-	@echo "  make web-logs      # View logs"
-	@echo "  make web-restart   # Restart application"
+	@echo "  make start-with-web  # Start everything including web app"
+	@echo "  make web-start       # Start web app only"
+	@echo "  make web-build       # Build web app images"
+	@echo "  make web-logs        # View web app logs"
+	@echo "  make web-restart     # Restart web application"
