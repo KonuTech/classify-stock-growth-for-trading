@@ -41,6 +41,23 @@ export default function StockComparison({ initialStocks = [], onClose }: StockCo
     fetchAvailableStocks();
   }, []);
 
+  // ESC key handler to close modal
+  useEffect(() => {
+    const handleEscapeKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    // Add event listener
+    document.addEventListener('keydown', handleEscapeKey);
+
+    // Cleanup event listener on component unmount
+    return () => {
+      document.removeEventListener('keydown', handleEscapeKey);
+    };
+  }, [onClose]);
+
   // Fetch data for all selected stocks manually (can't use hooks in loops)
   const [stockData, setStockData] = useState<{[key: string]: any}>({});
   const [loading, setLoading] = useState<{[key: string]: boolean}>({});

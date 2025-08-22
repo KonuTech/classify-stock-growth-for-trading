@@ -1,5 +1,6 @@
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Cell } from 'recharts';
+import ReturnsDistributionChart from './ReturnsDistributionChart';
 
 interface ReturnsData {
   date: string;
@@ -102,48 +103,60 @@ export default function ReturnsChart({
   const winRate = totalReturns > 0 ? (positiveReturns / totalReturns) * 100 : 0;
 
   return (
-    <div className="w-full">
-      <div className="mb-4">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-          {symbol} {title}
-        </h3>
-        <div className="flex space-x-4 text-sm text-gray-600 dark:text-gray-400 mt-1">
-          <span>Avg: {avgReturn.toFixed(3)}%</span>
-          <span>Win Rate: {winRate.toFixed(1)}%</span>
-          <span>Days: {totalReturns}</span>
+    <div className="w-full space-y-8">
+      {/* Timeline Chart */}
+      <div className="w-full">
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+            {symbol} {title} Timeline
+          </h3>
+          <div className="flex space-x-4 text-sm text-gray-600 dark:text-gray-400 mt-1">
+            <span>Avg: {avgReturn.toFixed(3)}%</span>
+            <span>Win Rate: {winRate.toFixed(1)}%</span>
+            <span>Days: {totalReturns}</span>
+          </div>
         </div>
+        
+        <ResponsiveContainer width="100%" height={height}>
+          <BarChart data={processedData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+            <XAxis 
+              dataKey="date" 
+              tickFormatter={formatDate}
+              stroke="#6B7280"
+              fontSize={12}
+            />
+            <YAxis 
+              tickFormatter={(value) => `${value.toFixed(1)}%`}
+              stroke="#6B7280"
+              fontSize={12}
+            />
+            
+            {/* Reference line at zero */}
+            <ReferenceLine y={0} stroke="#374151" strokeWidth={1} />
+            
+            <Bar 
+              dataKey="daily_return"
+              name="Daily Return"
+            >
+              {processedData.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.color} />
+              ))}
+            </Bar>
+            
+            <Tooltip content={<CustomTooltip />} />
+          </BarChart>
+        </ResponsiveContainer>
       </div>
-      
-      <ResponsiveContainer width="100%" height={height}>
-        <BarChart data={processedData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
-          <XAxis 
-            dataKey="date" 
-            tickFormatter={formatDate}
-            stroke="#6B7280"
-            fontSize={12}
-          />
-          <YAxis 
-            tickFormatter={(value) => `${value.toFixed(1)}%`}
-            stroke="#6B7280"
-            fontSize={12}
-          />
-          
-          {/* Reference line at zero */}
-          <ReferenceLine y={0} stroke="#374151" strokeWidth={1} />
-          
-          <Bar 
-            dataKey="daily_return"
-            name="Daily Return"
-          >
-            {processedData.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={entry.color} />
-            ))}
-          </Bar>
-          
-          <Tooltip content={<CustomTooltip />} />
-        </BarChart>
-      </ResponsiveContainer>
+
+      {/* Distribution Chart (Bell Curve) */}
+      <div className="w-full border-t border-gray-200 dark:border-gray-700 pt-6">
+        <ReturnsDistributionChart 
+          data={data} 
+          symbol={symbol} 
+          height={height} 
+        />
+      </div>
     </div>
   );
 }

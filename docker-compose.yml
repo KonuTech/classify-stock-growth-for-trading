@@ -30,6 +30,19 @@ services:
     volumes:
       - pgadmin_data:/var/lib/pgadmin
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   airflow:
     image: apache/airflow:3.0.4-python3.12
     depends_on:
@@ -64,6 +77,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       - NODE_ENV=development
       - PORT=3001
@@ -73,6 +88,8 @@ services:
       - DB_USER=postgres
       - DB_PASSWORD=postgres
       - DB_SCHEMA=prod_stock_data
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     ports:
       - "3001:3001"
     volumes:
@@ -102,3 +119,4 @@ services:
 volumes:
   postgres_data:
   pgadmin_data:
+  redis_data:

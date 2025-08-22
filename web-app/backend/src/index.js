@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const { Pool } = require('pg');
+const cacheManager = require('./cache');
 
 // Load environment variables
 dotenv.config();
@@ -50,9 +51,38 @@ app.get('/test-db', async (req, res) => {
   }
 });
 
-// Get all stocks
+// Get all stocks with basic statistics
 app.get('/api/stocks', async (req, res) => {
-  console.log('📊 Fetching stocks from prod_stock_data...');
+  const { timeframe = '1Y' } = req.query;
+  console.log(`📊 Fetching stocks with statistics from prod_stock_data (timeframe: ${timeframe})...`);
+  
+  // Check cache first
+  const cacheKey = cacheManager.getStockListKey(timeframe);
+  const cachedData = await cacheManager.get(cacheKey);
+  
+  if (cachedData) {
+    console.log(`⚡ Returning cached data for timeframe: ${timeframe} (${cachedData.length} stocks)`);
+    return res.json(cachedData);
+  }
+  
+  // Calculate date range based on timeframe
+  let daysBack;
+  let useTimeframeFilter = true;
+  switch(timeframe) {
+    case '1M': daysBack = 30; break;
+    case '3M': daysBack = 90; break;
+    case '6M': daysBack = 180; break;
+    case '1Y': daysBack = 365; break;
+    case 'MAX': 
+      useTimeframeFilter = false; 
+      daysBack = null;
+      break;
+    default: daysBack = 365;
+  }
+  
+  const startTime = Date.now();
+  console.log(`🔍 Cache MISS - Computing fresh statistics for ${timeframe} timeframe...`);
+  
   try {
     // Test basic connection first
     const testResult = await pool.query('SELECT 1 as test');
@@ -61,28 +91,215 @@ app.get('/api/stocks', async (req, res) => {
     await pool.query('SET search_path TO prod_stock_data');
     console.log('✅ Search path set to prod_stock_data');
     
-    // Get all stocks with their latest price and record count
-    const result = await pool.query(`
-      SELECT 
-        bi.symbol,
-        bi.name,
-        bi.currency,
-        COUNT(sp.id) as total_records,
-        MAX(sp.trading_date_local) as latest_date,
-        (SELECT sp2.close_price 
-         FROM stock_prices sp2 
-         WHERE sp2.stock_id = bi.id 
-         ORDER BY sp2.trading_date_local DESC 
-         LIMIT 1) as latest_price
-      FROM base_instruments bi
-      LEFT JOIN stock_prices sp ON bi.id = sp.stock_id
-      WHERE bi.instrument_type = $1 AND bi.is_active = $2
-      GROUP BY bi.id, bi.symbol, bi.name, bi.currency
-      ORDER BY bi.symbol;
-    `, ['stock', true]);
+    // Build the query dynamically based on whether we're filtering by timeframe
+    let query, params;
     
-    console.log(`✅ Found ${result.rows.length} stocks`);
-    console.log('First few stocks:', result.rows.slice(0, 3));
+    if (useTimeframeFilter) {
+      query = `
+        WITH stock_stats AS (
+          SELECT 
+            bi.id,
+            bi.symbol,
+            bi.name,
+            bi.currency,
+            COUNT(sp.id) as total_records,
+            MAX(sp.trading_date_local) as latest_date,
+            -- Current price (latest)
+            (SELECT sp2.close_price 
+             FROM stock_prices sp2 
+             WHERE sp2.stock_id = bi.id 
+             ORDER BY sp2.trading_date_local DESC 
+             LIMIT 1) as current_price,
+            -- First price for total return calculation (within timeframe)
+            (SELECT sp3.close_price 
+             FROM stock_prices sp3 
+             WHERE sp3.stock_id = bi.id 
+               AND sp3.trading_date_local >= CURRENT_DATE - INTERVAL '1 day' * $3
+             ORDER BY sp3.trading_date_local ASC 
+             LIMIT 1) as first_price,
+            -- Price range (high and low)
+            MAX(sp.high_price) as highest_price,
+            MIN(sp.low_price) as lowest_price
+          FROM base_instruments bi
+          LEFT JOIN stock_prices sp ON bi.id = sp.stock_id
+            AND sp.trading_date_local >= CURRENT_DATE - INTERVAL '1 day' * $3
+          WHERE bi.instrument_type = $1 AND bi.is_active = $2
+          GROUP BY bi.id, bi.symbol, bi.name, bi.currency
+        ),
+        daily_returns AS (
+          SELECT 
+            ss.id,
+            ss.symbol,
+            AVG(
+              CASE 
+                WHEN prev_close.close_price IS NOT NULL AND prev_close.close_price > 0 
+                THEN ((sp.close_price - prev_close.close_price) / prev_close.close_price) * 100 
+                ELSE NULL 
+              END
+            ) as avg_daily_return
+          FROM stock_stats ss
+          LEFT JOIN stock_prices sp ON ss.id = sp.stock_id
+            AND sp.trading_date_local >= CURRENT_DATE - INTERVAL '1 day' * $3
+          LEFT JOIN stock_prices prev_close ON ss.id = prev_close.stock_id 
+            AND prev_close.trading_date_local = sp.trading_date_local - INTERVAL '1 day'
+          GROUP BY ss.id, ss.symbol
+        ),
+        drawdown_calc AS (
+          SELECT 
+            ss.id,
+            ss.symbol,
+            -- Calculate running maximum and drawdown
+            MIN(
+              CASE 
+                WHEN running_max.max_price > 0 
+                THEN ((sp.close_price - running_max.max_price) / running_max.max_price) * 100 
+                ELSE 0 
+              END
+            ) as max_drawdown
+          FROM stock_stats ss
+          LEFT JOIN stock_prices sp ON ss.id = sp.stock_id
+            AND sp.trading_date_local >= CURRENT_DATE - INTERVAL '1 day' * $3
+          LEFT JOIN LATERAL (
+            SELECT MAX(sp2.close_price) as max_price
+            FROM stock_prices sp2
+            WHERE sp2.stock_id = ss.id 
+              AND sp2.trading_date_local <= sp.trading_date_local
+              AND sp2.trading_date_local >= CURRENT_DATE - INTERVAL '1 day' * $3
+          ) running_max ON true
+          GROUP BY ss.id, ss.symbol
+        )
+        SELECT 
+          ss.symbol,
+          ss.name,
+          ss.currency,
+          ss.total_records,
+          ss.latest_date,
+          ROUND(ss.current_price::numeric, 2) as latest_price,
+          -- Price Range (High - Low)
+          ROUND((ss.highest_price - ss.lowest_price)::numeric, 2) as price_range,
+          ROUND(ss.highest_price::numeric, 2) as highest_price,
+          ROUND(ss.lowest_price::numeric, 2) as lowest_price,
+          -- Total Return
+          CASE 
+            WHEN ss.first_price IS NOT NULL AND ss.first_price > 0 
+            THEN ROUND((((ss.current_price - ss.first_price) / ss.first_price) * 100)::numeric, 2) 
+            ELSE NULL 
+          END as total_return,
+          -- Max Drawdown
+          COALESCE(ROUND(dc.max_drawdown::numeric, 2), 0) as max_drawdown
+        FROM stock_stats ss
+        LEFT JOIN daily_returns dr ON ss.id = dr.id
+        LEFT JOIN drawdown_calc dc ON ss.id = dc.id
+        ORDER BY ss.symbol;
+      `;
+      params = ['stock', true, daysBack];
+    } else {
+      // MAX timeframe - no date filtering
+      query = `
+        WITH stock_stats AS (
+          SELECT 
+            bi.id,
+            bi.symbol,
+            bi.name,
+            bi.currency,
+            COUNT(sp.id) as total_records,
+            MAX(sp.trading_date_local) as latest_date,
+            -- Current price (latest)
+            (SELECT sp2.close_price 
+             FROM stock_prices sp2 
+             WHERE sp2.stock_id = bi.id 
+             ORDER BY sp2.trading_date_local DESC 
+             LIMIT 1) as current_price,
+            -- First price for total return calculation (all time)
+            (SELECT sp3.close_price 
+             FROM stock_prices sp3 
+             WHERE sp3.stock_id = bi.id 
+             ORDER BY sp3.trading_date_local ASC 
+             LIMIT 1) as first_price,
+            -- Price range (high and low) - all time
+            MAX(sp.high_price) as highest_price,
+            MIN(sp.low_price) as lowest_price
+          FROM base_instruments bi
+          LEFT JOIN stock_prices sp ON bi.id = sp.stock_id
+          WHERE bi.instrument_type = $1 AND bi.is_active = $2
+          GROUP BY bi.id, bi.symbol, bi.name, bi.currency
+        ),
+        daily_returns AS (
+          SELECT 
+            ss.id,
+            ss.symbol,
+            AVG(
+              CASE 
+                WHEN prev_close.close_price IS NOT NULL AND prev_close.close_price > 0 
+                THEN ((sp.close_price - prev_close.close_price) / prev_close.close_price) * 100 
+                ELSE NULL 
+              END
+            ) as avg_daily_return
+          FROM stock_stats ss
+          LEFT JOIN stock_prices sp ON ss.id = sp.stock_id
+          LEFT JOIN stock_prices prev_close ON ss.id = prev_close.stock_id 
+            AND prev_close.trading_date_local = sp.trading_date_local - INTERVAL '1 day'
+          GROUP BY ss.id, ss.symbol
+        ),
+        drawdown_calc AS (
+          SELECT 
+            ss.id,
+            ss.symbol,
+            -- Calculate running maximum and drawdown (all time)
+            MIN(
+              CASE 
+                WHEN running_max.max_price > 0 
+                THEN ((sp.close_price - running_max.max_price) / running_max.max_price) * 100 
+                ELSE 0 
+              END
+            ) as max_drawdown
+          FROM stock_stats ss
+          LEFT JOIN stock_prices sp ON ss.id = sp.stock_id
+          LEFT JOIN LATERAL (
+            SELECT MAX(sp2.close_price) as max_price
+            FROM stock_prices sp2
+            WHERE sp2.stock_id = ss.id 
+              AND sp2.trading_date_local <= sp.trading_date_local
+          ) running_max ON true
+          GROUP BY ss.id, ss.symbol
+        )
+        SELECT 
+          ss.symbol,
+          ss.name,
+          ss.currency,
+          ss.total_records,
+          ss.latest_date,
+          ROUND(ss.current_price::numeric, 2) as latest_price,
+          -- Price Range (High - Low)
+          ROUND((ss.highest_price - ss.lowest_price)::numeric, 2) as price_range,
+          ROUND(ss.highest_price::numeric, 2) as highest_price,
+          ROUND(ss.lowest_price::numeric, 2) as lowest_price,
+          -- Total Return (all time)
+          CASE 
+            WHEN ss.first_price IS NOT NULL AND ss.first_price > 0 
+            THEN ROUND((((ss.current_price - ss.first_price) / ss.first_price) * 100)::numeric, 2) 
+            ELSE NULL 
+          END as total_return,
+          -- Max Drawdown (all time)
+          COALESCE(ROUND(dc.max_drawdown::numeric, 2), 0) as max_drawdown
+        FROM stock_stats ss
+        LEFT JOIN daily_returns dr ON ss.id = dr.id
+        LEFT JOIN drawdown_calc dc ON ss.id = dc.id
+        ORDER BY ss.symbol;
+      `;
+      params = ['stock', true];
+    }
+
+    const result = await pool.query(query, params);
+    
+    const computationTime = Date.now() - startTime;
+    console.log(`✅ Found ${result.rows.length} stocks with statistics (computed in ${computationTime}ms)`);
+    console.log('First stock with stats:', result.rows[0]);
+    
+    // Cache the results
+    await cacheManager.set(cacheKey, result.rows, timeframe);
+    console.log(`📦 Cached results for ${timeframe} timeframe`);
+    
     res.json(result.rows);
   } catch (error) {
     console.error('❌ Error fetching stocks:', error);
@@ -202,6 +419,15 @@ app.get('/api/stocks/:symbol/analytics', async (req, res) => {
   
   console.log(`📊 Fetching analytics for stock: ${symbol}, timeframe: ${timeframe}`);
   
+  // Check cache first
+  const cacheKey = cacheManager.getStockStatsKey(symbol, timeframe);
+  const cachedData = await cacheManager.get(cacheKey);
+  
+  if (cachedData) {
+    console.log(`⚡ Returning cached analytics for ${symbol} (${timeframe})`);
+    return res.json(cachedData);
+  }
+  
   // Calculate date range based on timeframe
   let daysBack;
   switch(timeframe) {
@@ -211,8 +437,12 @@ app.get('/api/stocks/:symbol/analytics', async (req, res) => {
     case '1Y': daysBack = 365; break;
     case '2Y': daysBack = 730; break;
     case 'ALL': daysBack = 3650; break; // ~10 years
+    case 'MAX': daysBack = 3650; break; // All available data
     default: daysBack = 365;
   }
+  
+  const startTime = Date.now();
+  console.log(`🔍 Cache MISS - Computing analytics for ${symbol} (${timeframe})...`);
   
   try {
     await pool.query('SET search_path TO prod_stock_data');
@@ -272,12 +502,20 @@ app.get('/api/stocks/:symbol/analytics', async (req, res) => {
       ORDER BY date;
     `, [symbol, daysBack]);
     
-    console.log(`✅ Analytics data for ${symbol}: ${analyticsResult.rows.length} records`);
-    res.json({
+    const computationTime = Date.now() - startTime;
+    const responseData = {
       symbol: symbol,
       timeframe: timeframe,
       data: analyticsResult.rows
-    });
+    };
+    
+    console.log(`✅ Analytics data for ${symbol}: ${analyticsResult.rows.length} records (computed in ${computationTime}ms)`);
+    
+    // Cache the results
+    await cacheManager.set(cacheKey, responseData, timeframe);
+    console.log(`📦 Cached analytics for ${symbol} (${timeframe})`);
+    
+    res.json(responseData);
     
   } catch (error) {
     console.error('❌ Error fetching analytics:', error);
@@ -501,6 +739,51 @@ app.get('/api/stocks/:symbol/statistics', async (req, res) => {
   }
 });
 
+// Cache status endpoint
+app.get('/api/cache/status', async (req, res) => {
+  try {
+    const stats = await cacheManager.getStats();
+    res.json({
+      status: 'OK',
+      cache: stats,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Error fetching cache status:', error);
+    res.status(500).json({ error: 'Failed to fetch cache status', details: error.message });
+  }
+});
+
+// Cache invalidation endpoints
+app.delete('/api/cache/:timeframe', async (req, res) => {
+  try {
+    const { timeframe } = req.params;
+    await cacheManager.invalidate(timeframe);
+    res.json({
+      status: 'OK',
+      message: `Cache invalidated for timeframe: ${timeframe}`,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Error invalidating cache:', error);
+    res.status(500).json({ error: 'Failed to invalidate cache', details: error.message });
+  }
+});
+
+app.delete('/api/cache', async (req, res) => {
+  try {
+    await cacheManager.invalidate('ALL');
+    res.json({
+      status: 'OK',
+      message: 'Cache invalidated for all timeframes',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Error invalidating cache:', error);
+    res.status(500).json({ error: 'Failed to invalidate cache', details: error.message });
+  }
+});
+
 // Get model performance
 app.get('/api/models', async (req, res) => {
   console.log('🤖 Fetching ML models performance...');
@@ -530,8 +813,27 @@ app.get('/api/models', async (req, res) => {
   }
 });
 
-app.listen(port, () => {
-  console.log(`🚀 Backend server running on http://localhost:${port}`);
-  console.log(`📊 Connected to database: ${process.env.DB_NAME || 'stock_data'}`);
-  console.log(`🗂️  Using schema: prod_stock_data`);
-});
+// Initialize cache and start server
+async function startServer() {
+  try {
+    // Initialize Redis cache
+    await cacheManager.connect();
+    
+    app.listen(port, () => {
+      console.log(`🚀 Backend server running on http://localhost:${port}`);
+      console.log(`📊 Connected to database: ${process.env.DB_NAME || 'stock_data'}`);
+      console.log(`📦 Redis cache: ${cacheManager.isConnected ? 'Connected' : 'Unavailable (graceful degradation)'}`);
+      console.log(`🗂️  Using schema: prod_stock_data`);
+    });
+  } catch (error) {
+    console.error('❌ Server startup error:', error);
+    // Start server anyway with graceful degradation
+    app.listen(port, () => {
+      console.log(`🚀 Backend server running on http://localhost:${port} (without cache)`);
+      console.log(`📊 Connected to database: ${process.env.DB_NAME || 'stock_data'}`);
+      console.log(`🗂️  Using schema: prod_stock_data`);
+    });
+  }
+}
+
+startServer();

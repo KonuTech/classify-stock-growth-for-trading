@@ -55,12 +55,45 @@ export default function StockDetail({ symbol, onClose }: StockDetailProps) {
   const [analyticsData, setAnalyticsData] = useState<AnalyticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [timeframe, setTimeframe] = useState<'1M' | '3M' | '6M' | '1Y'>('3M');
+  const [timeframe, setTimeframe] = useState<'1M' | '3M' | '6M' | '1Y' | 'MAX'>('1Y');
   const [activeTab, setActiveTab] = useState<string>('overview');
+
+  // Tab options - moved here to be available for useEffect
+  const tabOptions = [
+    { id: 'overview', label: 'Overview', icon: '📊' },
+    { id: 'advanced', label: 'Advanced Analysis', icon: '📈' },
+    { id: 'returns', label: 'Returns', icon: '💹' },
+    { id: 'statistics', label: 'Statistics', icon: '📋' },
+  ];
 
   useEffect(() => {
     fetchStockDetail();
   }, [symbol, timeframe]);
+
+  // ESC and TAB key handlers
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      } else if (event.key === 'Tab') {
+        // Prevent default tab behavior (focus change)
+        event.preventDefault();
+        
+        // Cycle through tabs
+        const currentIndex = tabOptions.findIndex(tab => tab.id === activeTab);
+        const nextIndex = (currentIndex + 1) % tabOptions.length;
+        setActiveTab(tabOptions[nextIndex].id);
+      }
+    };
+
+    // Add event listener
+    document.addEventListener('keydown', handleKeyDown);
+
+    // Cleanup event listener on component unmount
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose, activeTab, tabOptions]);
 
   const fetchStockDetail = async () => {
     try {
@@ -116,13 +149,6 @@ export default function StockDetail({ symbol, onClose }: StockDetailProps) {
     }).format(price);
   };
 
-  const tabOptions = [
-    { id: 'overview', label: 'Overview', icon: '📊' },
-    { id: 'advanced', label: 'Advanced Analysis', icon: '📈' },
-    { id: 'returns', label: 'Returns', icon: '💹' },
-    { id: 'statistics', label: 'Statistics', icon: '📋' },
-  ];
-
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('pl-PL');
   };
@@ -174,6 +200,10 @@ export default function StockDetail({ symbol, onClose }: StockDetailProps) {
           <div>
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{stockData.symbol}</h2>
             <p className="text-gray-600 dark:text-gray-300">{stockData.name}</p>
+            <div className="flex space-x-4 text-xs text-gray-500 dark:text-gray-400 mt-1">
+              <span>⌨️ TAB: Next tab</span>
+              <span>ESC: Close</span>
+            </div>
           </div>
           <button 
             onClick={onClose}
@@ -239,7 +269,7 @@ export default function StockDetail({ symbol, onClose }: StockDetailProps) {
           {/* Timeframe Selector */}
           <div className="mb-6">
             <div className="flex space-x-2">
-              {(['1M', '3M', '6M', '1Y'] as const).map((tf) => (
+              {(['1M', '3M', '6M', '1Y', 'MAX'] as const).map((tf) => (
                 <button
                   key={tf}
                   onClick={() => setTimeframe(tf)}
