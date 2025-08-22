@@ -211,22 +211,49 @@ print('CUDA available:', xgb.build_info().get('USE_CUDA', False))
 
 ### 2. Complete Infrastructure Setup (Recommended)
 
+**Option A: Complete Platform (ETL + ML + Web App)**
 ```bash
-# 🚀 COMPLETE DEPLOYMENT: Start all services + initialize schemas + trigger DAGs
-make start
+# 🚀 COMPLETE DEPLOYMENT: Start all services including web application
+make start-with-web
 
 # This comprehensive command will:
-# - Start PostgreSQL 17, Airflow 3.0.4, and pgAdmin services
-# - Initialize dev_stock_data and test_stock_data schemas with unified ID design
-# - Set up database permissions for multi-user access
-# - Configure Airflow connections automatically (postgres_default, postgres_stock)
-# - Trigger development DAG (incremental mode)
-# - Trigger test environment DAG (FULL_BACKFILL mode - 50,000+ records)
+# - Start PostgreSQL 17, Airflow 3.0.4, and pgAdmin services  
+# - Launch React frontend (port 3000) and Express.js backend (port 3001)
+# - Initialize all database schemas (dev/test/prod) with ML tables
+# - Set up database permissions and connections
+# - Build and deploy web application Docker containers
 # - Extract all service credentials to .env file
-# - Display access URLs and credentials
 
-# ⚠️  NOTE: make start automatically runs test DAG in full_backfill mode
-# This will download complete historical data (~5-10 minutes processing time)
+# 🌐 Access URLs after deployment:
+# Frontend Dashboard: http://localhost:3000
+# Backend API:       http://localhost:3001  
+# Airflow UI:        http://localhost:8080
+# pgAdmin:           http://localhost:5050
+```
+
+**Option B: Infrastructure Only (ETL + ML Pipeline)**
+```bash
+# 🚀 ETL/ML DEPLOYMENT: Start data pipeline services only
+make start
+
+# This will:
+# - Start PostgreSQL, Airflow, and pgAdmin
+# - Initialize all database schemas with ML tables
+# - Trigger development and test DAGs
+# - Extract service credentials
+# - Skip web application deployment
+```
+
+**Option C: Web Application Only**  
+```bash  
+# Start web app with existing database
+make web-start
+
+# Or check web app status
+make web-status
+
+# View web app logs
+make web-logs
 ```
 
 ### 3. Manual Step-by-Step Setup (Alternative)
@@ -808,7 +835,10 @@ A **production-ready React web application** has been integrated to provide intu
 - **⚡ Environment Configuration**: Docker-compose integration with automatic database discovery
 - **📈 Real-time Data**: Live stock prices and trading volumes from production database
 
-### 🎯 Web Application Status: **LIVE & OPERATIONAL**
+### 🎯 Web Application Status: **FULLY INTEGRATED & OPERATIONAL**
+
+**🚀 Latest Update (August 2025)**: Complete Docker integration with main infrastructure  
+**✅ Integration Status**: Web application now fully integrated with main docker-compose.yml
 
 ```bash
 # Access your web application
@@ -844,19 +874,25 @@ A **production-ready React web application** has been integrated to provide intu
 ### 🚀 Quick Start: Launch Web Application
 
 ```bash
-# Start the complete web application stack
-make start                          # Start all services (database + ETL)
-cd web-app/backend && npm start     # Start API server (port 3001)
-cd web-app/frontend && npm start    # Start React app (port 3000)
+# 🚀 NEW: One-Command Integrated Deployment (Recommended)
+make start-with-web
 
-# Or use the running instances:
-# Backend: Already running on port 3001 ✅
-# Frontend: Already running on port 3000 ✅
-# Database: prod_stock_data schema with live data ✅
+# This complete command:
+# ✅ Starts PostgreSQL, Airflow, and pgAdmin services
+# ✅ Builds and launches containerized web application
+# ✅ Initializes all database schemas with ML tables  
+# ✅ Provides immediate access to working application
 
-# Test API connectivity
-curl http://localhost:3001/api/stocks  # Verify backend
-# Expected: JSON array of 10 stocks with real market data
+# 🌐 Access URLs:
+# Frontend Dashboard: http://localhost:3000 (React + TypeScript)
+# Backend API:        http://localhost:3001 (Express.js + PostgreSQL)
+# Airflow UI:         http://localhost:8080 (Pipeline management)
+# pgAdmin:            http://localhost:5050 (Database admin)
+
+# 📊 Test API connectivity  
+curl http://localhost:3001/api/stocks    # Stock data API
+curl http://localhost:3001/health        # Health check
+# Expected: Real stock data from prod_stock_data schema
 ```
 
 ### 🏗️ Technical Architecture
@@ -880,6 +916,34 @@ curl http://localhost:3001/api/stocks  # Verify backend
 - **Optimized Queries**: Parameterized queries with PostgreSQL-specific optimizations
 - **Real-time Data**: Live stock prices and metadata from production ETL pipeline
 - **ML Integration**: Access to trained models, predictions, and backtesting results
+
+### 🐳 Docker Integration & Deployment
+
+**NEW: Fully Containerized Web Application**
+- **Integrated Services**: Web app now part of main docker-compose.yml infrastructure
+- **Production Dockerfiles**: Multi-stage builds with security best practices (non-root users)
+- **Health Checks**: Built-in container health monitoring with curl-based endpoints
+- **Hot-Reload Development**: Volume mounting for development with instant code updates
+- **Optimized Builds**: .dockerignore files for faster, smaller image builds
+
+**Container Architecture**:
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Docker Desktop Environment                    │
+├─────────────────────────────────────────────────────────────────┤
+│ web-frontend:3000 ←→ web-backend:3001 ←→ postgres:5432          │
+│                                    ↕                            │
+│              airflow:8080 ←→ pgadmin:5050                       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Enhanced Makefile Commands**:
+- `make start-with-web` - Complete platform deployment including web app
+- `make web-build` - Build web application Docker images  
+- `make web-start` - Start web services only
+- `make web-status` - Check web application health and URLs
+- `make web-logs` - View web application container logs
+- `make web-clean` - Clean web containers and images
 
 ### 📊 Web Application Screenshots & Features
 
