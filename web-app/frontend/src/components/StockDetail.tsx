@@ -70,8 +70,8 @@ export default function StockDetail({ symbol, onClose }: StockDetailProps) {
   // Tab options - moved here to be available for useEffect
   const tabOptions = [
     { id: 'overview', label: 'Overview', icon: '📊' },
-    { id: 'advanced', label: 'Advanced Analysis', icon: '📈' },
     { id: 'returns', label: 'Returns', icon: '💹' },
+    { id: 'advanced', label: 'Advanced Analysis', icon: '📈' },
     { id: 'statistics', label: 'Statistics', icon: '📋' },
     { id: 'ml-analytics', label: 'ML Analytics', icon: '🤖' },
   ];
@@ -447,6 +447,7 @@ export default function StockDetail({ symbol, onClose }: StockDetailProps) {
                 <MLAnalyticsChart 
                   symbol={symbol}
                   data={mlData}
+                  stockData={stockData}
                 />
               )}
             </div>
@@ -474,36 +475,63 @@ export default function StockDetail({ symbol, onClose }: StockDetailProps) {
             </div>
           )}
 
-          {/* Recent Price Data Table */}
-          <div className="mt-6">
-            <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Recent Price Data</h3>
-            <div className="overflow-x-auto">
-              <table className="min-w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-                <thead className="bg-gray-50 dark:bg-gray-700">
-                  <tr>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Date</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Open</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">High</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Low</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Close</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Volume</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {stockData.price_history.slice(-10).reverse().map((price, index) => (
-                    <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                      <td className="px-4 py-2 text-sm text-gray-900 dark:text-white">{formatDate(price.date)}</td>
-                      <td className="px-4 py-2 text-sm text-gray-900 dark:text-white">{formatPrice(price.open)}</td>
-                      <td className="px-4 py-2 text-sm text-gray-900 dark:text-white">{formatPrice(price.high)}</td>
-                      <td className="px-4 py-2 text-sm text-gray-900 dark:text-white">{formatPrice(price.low)}</td>
-                      <td className="px-4 py-2 text-sm font-medium text-gray-900 dark:text-white">{formatPrice(price.close)}</td>
-                      <td className="px-4 py-2 text-sm text-gray-900 dark:text-white">{price.volume.toLocaleString()}</td>
+          {/* Recent Price Data Table - Hidden for ML Analytics tab (moved there) */}
+          {activeTab !== 'ml-analytics' && (
+            <div className="mt-6">
+              <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Recent Price Data</h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Date</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Open</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">High</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Low</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Close</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Volume</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                    {stockData.price_history.slice(-10).reverse().map((price, index) => {
+                      const isGain = price.close > price.open;
+                      const isLoss = price.close < price.open;
+                      const isFlat = price.close === price.open;
+                      
+                      return (
+                        <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                          <td className="px-4 py-2 text-sm text-gray-900 dark:text-white">{formatDate(price.date)}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900 dark:text-white">{formatPrice(price.open)}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900 dark:text-white">{formatPrice(price.high)}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900 dark:text-white">{formatPrice(price.low)}</td>
+                          <td className="px-4 py-2 text-sm font-medium text-gray-900 dark:text-white">
+                            <div className="flex items-center space-x-2">
+                              <span>{formatPrice(price.close)}</span>
+                              {isGain && (
+                                <span className="text-green-500 dark:text-green-400 text-lg font-bold" title="Close > Open">
+                                  ▲
+                                </span>
+                              )}
+                              {isLoss && (
+                                <span className="text-red-500 dark:text-red-400 text-lg font-bold" title="Close < Open">
+                                  ▼
+                                </span>
+                              )}
+                              {isFlat && (
+                                <span className="text-gray-500 dark:text-gray-400 text-lg font-bold" title="Close = Open">
+                                  ■
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-2 text-sm text-gray-900 dark:text-white">{price.volume.toLocaleString()}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

@@ -900,6 +900,9 @@ app.get('/api/stocks/:symbol/ml-analytics', async (req, res) => {
         status,
         test_roc_auc,
         test_accuracy,
+        test_f1_score,
+        cv_score,
+        validation_roc_auc,
         training_records,
         validation_records,
         test_records,
@@ -980,19 +983,29 @@ app.get('/api/stocks/:symbol/ml-analytics', async (req, res) => {
       LIMIT 10
     `, [instrumentId]);
     
-    // Get backtest results
-    const backtestResult = await pool.query(`
+    // Calculate precision, recall from confusion matrix data
+    const precisionRecallResult = await pool.query(`
+      WITH confusion_stats AS (
+        SELECT 
+          SUM(CASE WHEN predicted_class = true AND actual_class = true THEN 1 ELSE 0 END) as true_positive,
+          SUM(CASE WHEN predicted_class = true AND actual_class = false THEN 1 ELSE 0 END) as false_positive,
+          SUM(CASE WHEN predicted_class = false AND actual_class = true THEN 1 ELSE 0 END) as false_negative,
+          SUM(CASE WHEN predicted_class = false AND actual_class = false THEN 1 ELSE 0 END) as true_negative
+        FROM ml_predictions 
+        WHERE instrument_id = $1 AND actual_class IS NOT NULL
+      )
       SELECT 
-        total_return,
-        sharpe_ratio,
-        win_rate,
-        total_trades,
-        max_drawdown,
-        annualized_return
-      FROM ml_backtest_results 
-      WHERE instrument_id = $1
-      ORDER BY backtest_end_date DESC
-      LIMIT 1
+        true_positive,
+        false_positive,
+        false_negative,
+        true_negative,
+        CASE WHEN (true_positive + false_positive) > 0 
+             THEN true_positive::float / (true_positive + false_positive) 
+             ELSE 0 END as precision,
+        CASE WHEN (true_positive + false_negative) > 0 
+             THEN true_positive::float / (true_positive + false_negative) 
+             ELSE 0 END as recall
+      FROM confusion_stats
     `, [instrumentId]);
     
     // Parse feature importance
@@ -1019,6 +1032,9 @@ app.get('/api/stocks/:symbol/ml-analytics', async (req, res) => {
         status: modelInfo.status,
         test_roc_auc: parseFloat(modelInfo.test_roc_auc || 0),
         test_accuracy: parseFloat(modelInfo.test_accuracy || 0),
+        test_f1_score: parseFloat(modelInfo.test_f1_score || 0),
+        cv_score: parseFloat(modelInfo.cv_score || 0),
+        validation_roc_auc: parseFloat(modelInfo.validation_roc_auc || 0),
         training_records: parseInt(modelInfo.training_records || 0),
         validation_records: parseInt(modelInfo.validation_records || 0),
         test_records: parseInt(modelInfo.test_records || 0),
@@ -1045,14 +1061,31 @@ app.get('/api/stocks/:symbol/ml-analytics', async (req, res) => {
           trading_signal: pred.trading_signal
         }))
       },
-      backtest_results: backtestResult.rows[0] ? {
-        total_return: parseFloat(backtestResult.rows[0].total_return || 0),
-        sharpe_ratio: parseFloat(backtestResult.rows[0].sharpe_ratio || 0),
-        win_rate: parseFloat(backtestResult.rows[0].win_rate || 0),
-        total_trades: parseInt(backtestResult.rows[0].total_trades || 0),
-        max_drawdown: parseFloat(backtestResult.rows[0].max_drawdown || 0),
-        annualized_return: parseFloat(backtestResult.rows[0].annualized_return || 0)
-      } : null,
+      training_statistics: {
+        // Core metrics from model training
+        test_roc_auc: parseFloat(modelInfo.test_roc_auc || 0),
+        test_accuracy: parseFloat(modelInfo.test_accuracy || 0),
+        test_f1_score: parseFloat(modelInfo.test_f1_score || 0),
+        cv_score: parseFloat(modelInfo.cv_score || 0),
+        validation_roc_auc: parseFloat(modelInfo.validation_roc_auc || 0),
+        
+        // Calculated precision/recall from confusion matrix
+        precision: precisionRecallResult.rows[0] ? parseFloat(precisionRecallResult.rows[0].precision || 0) : 0,
+        recall: precisionRecallResult.rows[0] ? parseFloat(precisionRecallResult.rows[0].recall || 0) : 0,
+        
+        // Calculated F1 score if not available from model
+        calculated_f1_score: precisionRecallResult.rows[0] ? 
+          (function() {
+            const p = parseFloat(precisionRecallResult.rows[0].precision || 0);
+            const r = parseFloat(precisionRecallResult.rows[0].recall || 0);
+            return (p + r) > 0 ? (2 * p * r) / (p + r) : 0;
+          })() : 0,
+          
+        // Training data split info
+        training_records: parseInt(modelInfo.training_records || 0),
+        validation_records: parseInt(modelInfo.validation_records || 0),
+        test_records: parseInt(modelInfo.test_records || 0)
+      },
       feature_importance: featureImportance
     };
     

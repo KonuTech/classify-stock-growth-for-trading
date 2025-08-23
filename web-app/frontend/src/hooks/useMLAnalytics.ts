@@ -37,13 +37,18 @@ interface PredictionsSummary {
   }>;
 }
 
-interface BacktestResults {
-  total_return: number;
-  sharpe_ratio: number;
-  win_rate: number;
-  total_trades: number;
-  max_drawdown: number;
-  annualized_return: number;
+interface TrainingStatistics {
+  test_roc_auc: number;
+  test_accuracy: number;
+  test_f1_score: number;
+  cv_score: number;
+  validation_roc_auc: number;
+  precision: number;
+  recall: number;
+  calculated_f1_score: number;
+  training_records: number;
+  validation_records: number;
+  test_records: number;
 }
 
 interface FeatureImportance {
@@ -56,7 +61,7 @@ export interface MLAnalyticsData {
   model_info: ModelInfo;
   performance_metrics: PerformanceMetrics;
   predictions_summary: PredictionsSummary;
-  backtest_results: BacktestResults | null;
+  training_statistics: TrainingStatistics;
   feature_importance: FeatureImportance[];
 }
 

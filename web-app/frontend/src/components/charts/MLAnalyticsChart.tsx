@@ -38,13 +38,18 @@ interface PredictionsSummary {
   }>;
 }
 
-interface BacktestResults {
-  total_return: number;
-  sharpe_ratio: number;
-  win_rate: number;
-  total_trades: number;
-  max_drawdown: number;
-  annualized_return: number;
+interface TrainingStatistics {
+  test_roc_auc: number;
+  test_accuracy: number;
+  test_f1_score: number;
+  cv_score: number;
+  validation_roc_auc: number;
+  precision: number;
+  recall: number;
+  calculated_f1_score: number;
+  training_records: number;
+  validation_records: number;
+  test_records: number;
 }
 
 interface FeatureImportance {
@@ -57,18 +62,44 @@ interface MLAnalyticsData {
   model_info: ModelInfo;
   performance_metrics: PerformanceMetrics;
   predictions_summary: PredictionsSummary;
-  backtest_results: BacktestResults | null;
+  training_statistics: TrainingStatistics;
   feature_importance: FeatureImportance[];
+}
+
+interface PriceData {
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+interface StockInfo {
+  symbol: string;
+  name: string;
+  currency: string;
+  total_records: number;
+  latest_date: string;
+  latest_price: number;
+  price_history: PriceData[];
 }
 
 interface MLAnalyticsProps {
   symbol: string;
   data: MLAnalyticsData;
+  stockData: StockInfo;
 }
 
-export default function MLAnalyticsChart({ symbol, data }: MLAnalyticsProps) {
+export default function MLAnalyticsChart({ symbol, data, stockData }: MLAnalyticsProps) {
   const formatPercent = (value: number) => `${(value * 100).toFixed(1)}%`;
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('pl-PL');
+  
+  const formatPrice = (price: number | string) => {
+    const numPrice = typeof price === 'string' ? parseFloat(price) : price;
+    if (isNaN(numPrice)) return 'N/A';
+    return `${numPrice.toFixed(2)} PLN`;
+  };
 
   // Prepare ROC curve data for Recharts
   const rocData = data.performance_metrics.roc_curve.fpr.map((fpr, i) => ({
@@ -228,6 +259,64 @@ export default function MLAnalyticsChart({ symbol, data }: MLAnalyticsProps) {
         </div>
       )}
 
+      {/* Recent Price Data Table */}
+      {stockData && stockData.price_history && stockData.price_history.length > 0 && (
+        <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+          <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Recent Price Data</h3>
+          <div className="overflow-x-auto">
+            <table className="min-w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Date</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Open</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">High</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Low</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Close</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Volume</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                {stockData.price_history.slice(-10).reverse().map((price, index) => {
+                  const isGain = price.close > price.open;
+                  const isLoss = price.close < price.open;
+                  const isFlat = price.close === price.open;
+                  
+                  return (
+                    <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                      <td className="px-4 py-2 text-sm text-gray-900 dark:text-white">{formatDate(price.date)}</td>
+                      <td className="px-4 py-2 text-sm text-gray-900 dark:text-white">{formatPrice(price.open)}</td>
+                      <td className="px-4 py-2 text-sm text-gray-900 dark:text-white">{formatPrice(price.high)}</td>
+                      <td className="px-4 py-2 text-sm text-gray-900 dark:text-white">{formatPrice(price.low)}</td>
+                      <td className="px-4 py-2 text-sm font-medium text-gray-900 dark:text-white">
+                        <div className="flex items-center space-x-2">
+                          <span>{formatPrice(price.close)}</span>
+                          {isGain && (
+                            <span className="text-green-500 dark:text-green-400 text-lg font-bold" title="Close > Open">
+                              ▲
+                            </span>
+                          )}
+                          {isLoss && (
+                            <span className="text-red-500 dark:text-red-400 text-lg font-bold" title="Close < Open">
+                              ▼
+                            </span>
+                          )}
+                          {isFlat && (
+                            <span className="text-gray-500 dark:text-gray-400 text-lg font-bold" title="Close = Open">
+                              ■
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-sm text-gray-900 dark:text-white">{price.volume.toLocaleString()}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* 2x2 Chart Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Confusion Matrix */}
@@ -336,50 +425,71 @@ export default function MLAnalyticsChart({ symbol, data }: MLAnalyticsProps) {
           </div>
         </div>
 
-        {/* Backtest Performance */}
-        {data.backtest_results && (
-          <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
-            <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
-              Backtest Performance
-            </h3>
-            <div className="space-y-3">
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Total Return:</span>
-                <span className={`font-medium ${
-                  data.backtest_results.total_return >= 0 
-                    ? 'text-green-600 dark:text-green-400' 
-                    : 'text-red-600 dark:text-red-400'
-                }`}>
-                  {formatPercent(data.backtest_results.total_return)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Sharpe Ratio:</span>
-                <span className="font-medium text-gray-900 dark:text-white">
-                  {data.backtest_results.sharpe_ratio.toFixed(2)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Win Rate:</span>
-                <span className="font-medium text-gray-900 dark:text-white">
-                  {formatPercent(data.backtest_results.win_rate)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Total Trades:</span>
-                <span className="font-medium text-gray-900 dark:text-white">
-                  {data.backtest_results.total_trades}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Max Drawdown:</span>
-                <span className="font-medium text-red-600 dark:text-red-400">
-                  {formatPercent(Math.abs(data.backtest_results.max_drawdown))}
-                </span>
+        {/* Training Statistics */}
+        <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+          <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
+            Training Statistics
+          </h3>
+          <div className="space-y-3">
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Test ROC-AUC:</span>
+              <span className={`font-medium ${
+                data.training_statistics.test_roc_auc >= 0.55 ? 'text-green-600 dark:text-green-400' :
+                data.training_statistics.test_roc_auc >= 0.50 ? 'text-yellow-600 dark:text-yellow-400' :
+                'text-red-600 dark:text-red-400'
+              }`}>
+                {data.training_statistics.test_roc_auc.toFixed(3)}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Test Accuracy:</span>
+              <span className="font-medium text-gray-900 dark:text-white">
+                {formatPercent(data.training_statistics.test_accuracy)}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Precision:</span>
+              <span className="font-medium text-gray-900 dark:text-white">
+                {data.training_statistics.precision > 0 ? formatPercent(data.training_statistics.precision) : 'N/A'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Recall:</span>
+              <span className="font-medium text-gray-900 dark:text-white">
+                {data.training_statistics.recall > 0 ? formatPercent(data.training_statistics.recall) : 'N/A'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600 dark:text-gray-400">F1-Score:</span>
+              <span className="font-medium text-gray-900 dark:text-white">
+                {data.training_statistics.calculated_f1_score > 0 ? 
+                  data.training_statistics.calculated_f1_score.toFixed(3) : 
+                  (data.training_statistics.test_f1_score > 0 ? 
+                    data.training_statistics.test_f1_score.toFixed(3) : 'N/A')
+                }
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Validation ROC-AUC:</span>
+              <span className="font-medium text-gray-900 dark:text-white">
+                {data.training_statistics.validation_roc_auc > 0 ? 
+                  data.training_statistics.validation_roc_auc.toFixed(3) : 'N/A'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600 dark:text-gray-400">CV Score:</span>
+              <span className="font-medium text-gray-900 dark:text-white">
+                {data.training_statistics.cv_score > 0 ? 
+                  data.training_statistics.cv_score.toFixed(3) : 'N/A'}
+              </span>
+            </div>
+            <div className="pt-2 border-t border-gray-200 dark:border-gray-600">
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                Training Split: {data.training_statistics.training_records?.toLocaleString() || 0} / {data.training_statistics.validation_records?.toLocaleString() || 0} / {data.training_statistics.test_records?.toLocaleString() || 0}
               </div>
             </div>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Feature Importance Chart */}
