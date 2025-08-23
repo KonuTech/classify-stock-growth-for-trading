@@ -1062,14 +1062,14 @@ app.get('/api/stocks/:symbol/ml-analytics', async (req, res) => {
         }))
       },
       training_statistics: {
-        // Core metrics from model training
-        test_roc_auc: parseFloat(modelInfo.test_roc_auc || 0),
+        // Core metrics from model training (with fallbacks)
+        test_roc_auc: parseFloat(modelInfo.test_roc_auc || modelInfo.validation_roc_auc || 0),
         test_accuracy: parseFloat(modelInfo.test_accuracy || 0),
         test_f1_score: parseFloat(modelInfo.test_f1_score || 0),
         cv_score: parseFloat(modelInfo.cv_score || 0),
         validation_roc_auc: parseFloat(modelInfo.validation_roc_auc || 0),
         
-        // Calculated precision/recall from confusion matrix
+        // Calculated precision/recall from confusion matrix (may be 0 if no actual_class data)
         precision: precisionRecallResult.rows[0] ? parseFloat(precisionRecallResult.rows[0].precision || 0) : 0,
         recall: precisionRecallResult.rows[0] ? parseFloat(precisionRecallResult.rows[0].recall || 0) : 0,
         
@@ -1081,10 +1081,28 @@ app.get('/api/stocks/:symbol/ml-analytics', async (req, res) => {
             return (p + r) > 0 ? (2 * p * r) / (p + r) : 0;
           })() : 0,
           
-        // Training data split info
+        // Training data split info (may be 0 if not stored properly)
         training_records: parseInt(modelInfo.training_records || 0),
         validation_records: parseInt(modelInfo.validation_records || 0),
-        test_records: parseInt(modelInfo.test_records || 0)
+        test_records: parseInt(modelInfo.test_records || 0),
+        
+        // Data quality indicators
+        has_actual_outcomes: (predSummaryResult.rows[0] ? parseFloat(predSummaryResult.rows[0].accuracy_rate || 0) : 0) > 0,
+        total_predictions_with_outcomes: confusionResult.rows.reduce((sum, row) => sum + parseInt(row.count), 0),
+        data_quality_score: (function() {
+          const hasActual = (predSummaryResult.rows[0] ? parseFloat(predSummaryResult.rows[0].accuracy_rate || 0) : 0) > 0;
+          const hasTrainingData = parseInt(modelInfo.training_records || 0) > 0;
+          const hasValidationAUC = parseFloat(modelInfo.validation_roc_auc || 0) > 0;
+          const hasFeatureImportance = modelInfo.feature_importance && JSON.parse(modelInfo.feature_importance || '{}');
+          
+          let score = 0;
+          if (hasActual) score += 0.4; // 40% for having actual outcomes
+          if (hasTrainingData) score += 0.3; // 30% for having training metrics
+          if (hasValidationAUC) score += 0.2; // 20% for having validation AUC
+          if (hasFeatureImportance) score += 0.1; // 10% for having feature importance
+          
+          return score;
+        })()
       },
       feature_importance: featureImportance
     };

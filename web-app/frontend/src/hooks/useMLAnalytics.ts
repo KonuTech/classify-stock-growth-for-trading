@@ -49,6 +49,9 @@ interface TrainingStatistics {
   training_records: number;
   validation_records: number;
   test_records: number;
+  has_actual_outcomes: boolean;
+  total_predictions_with_outcomes: number;
+  data_quality_score: number;
 }
 
 interface FeatureImportance {

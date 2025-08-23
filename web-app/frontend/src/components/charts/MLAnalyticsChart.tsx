@@ -50,6 +50,9 @@ interface TrainingStatistics {
   training_records: number;
   validation_records: number;
   test_records: number;
+  has_actual_outcomes: boolean;
+  total_predictions_with_outcomes: number;
+  data_quality_score: number;
 }
 
 interface FeatureImportance {
@@ -319,11 +322,165 @@ export default function MLAnalyticsChart({ symbol, data, stockData }: MLAnalytic
 
       {/* 2x2 Chart Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Prediction Distribution */}
+        <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+          <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
+            Prediction Distribution
+          </h3>
+          <div style={{ width: '100%', height: '300px' }}>
+            <ResponsiveContainer>
+              <BarChart data={distributionData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip 
+                  formatter={(value: number) => [value.toLocaleString(), 'Predictions']}
+                />
+                <Bar dataKey="value" fill="#8884d8">
+                  {distributionData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-2 text-xs text-gray-600 dark:text-gray-400 text-center">
+            Positive: {formatPercent(data.predictions_summary.positive_predictions / data.predictions_summary.total_predictions)} | 
+            Negative: {formatPercent(data.predictions_summary.negative_predictions / data.predictions_summary.total_predictions)}
+          </div>
+        </div>
+
+        {/* Training Statistics */}
+        <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+          <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
+            Training Statistics
+            {data.training_statistics.data_quality_score < 0.5 && (
+              <span className="ml-2 text-xs px-2 py-1 bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 rounded">
+                ⚠️ Limited Data
+              </span>
+            )}
+          </h3>
+          
+          {/* Data Quality Warning */}
+          {!data.training_statistics.has_actual_outcomes && (
+            <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg">
+              <div className="flex items-center mb-2">
+                <span className="text-amber-600 dark:text-amber-400 text-sm font-medium">
+                  📊 Missing Validation Data
+                </span>
+              </div>
+              <p className="text-xs text-amber-700 dark:text-amber-300">
+                Data is produced by Airflow DAGs that train XGBoost models; however, the data is not yet collected into PostgreSQL tables. This is an area for improvement.
+              </p>
+            </div>
+          )}
+          
+          <div className="space-y-3">
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600 dark:text-gray-400">
+                {data.training_statistics.test_roc_auc > 0 ? 'Test ROC-AUC:' : 'Validation ROC-AUC:'}
+                {data.training_statistics.test_roc_auc === 0 && data.training_statistics.validation_roc_auc > 0 && 
+                  <span className="ml-1 text-xs text-blue-600 dark:text-blue-400">*</span>
+                }
+              </span>
+              <span className={`font-medium ${
+                (data.training_statistics.test_roc_auc || data.training_statistics.validation_roc_auc) >= 0.55 ? 'text-green-600 dark:text-green-400' :
+                (data.training_statistics.test_roc_auc || data.training_statistics.validation_roc_auc) >= 0.50 ? 'text-yellow-600 dark:text-yellow-400' :
+                'text-red-600 dark:text-red-400'
+              }`}>
+                {(data.training_statistics.test_roc_auc || data.training_statistics.validation_roc_auc).toFixed(3)}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Test Accuracy:</span>
+              <span className="font-medium text-gray-900 dark:text-white">
+                {data.training_statistics.test_accuracy > 0 ? formatPercent(data.training_statistics.test_accuracy) : 'N/A'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600 dark:text-gray-400">
+                Precision:
+                {!data.training_statistics.has_actual_outcomes && 
+                  <span className="ml-1 text-xs text-amber-600 dark:text-amber-400">†</span>
+                }
+              </span>
+              <span className="font-medium text-gray-900 dark:text-white">
+                {data.training_statistics.precision > 0 ? formatPercent(data.training_statistics.precision) : 'N/A'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600 dark:text-gray-400">
+                Recall:
+                {!data.training_statistics.has_actual_outcomes && 
+                  <span className="ml-1 text-xs text-amber-600 dark:text-amber-400">†</span>
+                }
+              </span>
+              <span className="font-medium text-gray-900 dark:text-white">
+                {data.training_statistics.recall > 0 ? formatPercent(data.training_statistics.recall) : 'N/A'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600 dark:text-gray-400">
+                F1-Score:
+                {!data.training_statistics.has_actual_outcomes && 
+                  <span className="ml-1 text-xs text-amber-600 dark:text-amber-400">†</span>
+                }
+              </span>
+              <span className="font-medium text-gray-900 dark:text-white">
+                {data.training_statistics.calculated_f1_score > 0 ? 
+                  data.training_statistics.calculated_f1_score.toFixed(3) : 
+                  (data.training_statistics.test_f1_score > 0 ? 
+                    data.training_statistics.test_f1_score.toFixed(3) : 'N/A')
+                }
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600 dark:text-gray-400">CV Score:</span>
+              <span className="font-medium text-gray-900 dark:text-white">
+                {data.training_statistics.cv_score > 0 ? 
+                  data.training_statistics.cv_score.toFixed(3) : 'N/A'}
+              </span>
+            </div>
+            <div className="pt-2 border-t border-gray-200 dark:border-gray-600">
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                {data.training_statistics.training_records > 0 ? (
+                  <>Training Split: {data.training_statistics.training_records?.toLocaleString() || 0} / {data.training_statistics.validation_records?.toLocaleString() || 0} / {data.training_statistics.test_records?.toLocaleString() || 0}</>
+                ) : (
+                  <>Training Split: Not available</>
+                )}
+              </div>
+              {data.training_statistics.total_predictions_with_outcomes === 0 && (
+                <div className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                  † Requires actual outcomes for calculation ({data.predictions_summary.total_predictions} predictions pending validation)
+                </div>
+              )}
+              {data.training_statistics.test_roc_auc === 0 && data.training_statistics.validation_roc_auc > 0 && (
+                <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                  * Using validation AUC (test metrics not available)
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Confusion Matrix */}
         <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
           <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
             {symbol} - Confusion Matrix
           </h3>
+          
+          {/* Data Quality Warning */}
+          <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg">
+            <div className="flex items-center mb-2">
+              <span className="text-amber-600 dark:text-amber-400 text-sm font-medium">
+                📊 Missing Validation Data
+              </span>
+            </div>
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              Data is produced by Airflow DAGs that train XGBoost models; however, the data is not yet collected into PostgreSQL tables. This is an area for improvement.
+            </p>
+          </div>
+          
           <div style={{ width: '100%', height: '300px' }}>
             <ResponsiveContainer>
               <BarChart data={confusionData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
@@ -357,6 +514,19 @@ export default function MLAnalyticsChart({ symbol, data, stockData }: MLAnalytic
           <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
             {symbol} - ROC Curve
           </h3>
+          
+          {/* Data Quality Warning */}
+          <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg">
+            <div className="flex items-center mb-2">
+              <span className="text-amber-600 dark:text-amber-400 text-sm font-medium">
+                📊 Missing Validation Data
+              </span>
+            </div>
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              Data is produced by Airflow DAGs that train XGBoost models; however, the data is not yet collected into PostgreSQL tables. This is an area for improvement.
+            </p>
+          </div>
+          
           <div style={{ width: '100%', height: '300px' }}>
             <ResponsiveContainer>
               <LineChart data={rocData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
@@ -394,100 +564,6 @@ export default function MLAnalyticsChart({ symbol, data, stockData }: MLAnalytic
           </div>
           <div className="mt-2 text-xs text-gray-600 dark:text-gray-400 text-center">
             AUC: {data.model_info.test_roc_auc.toFixed(3)}
-          </div>
-        </div>
-
-        {/* Prediction Distribution */}
-        <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
-          <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
-            Prediction Distribution
-          </h3>
-          <div style={{ width: '100%', height: '300px' }}>
-            <ResponsiveContainer>
-              <BarChart data={distributionData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip 
-                  formatter={(value: number) => [value.toLocaleString(), 'Predictions']}
-                />
-                <Bar dataKey="value" fill="#8884d8">
-                  {distributionData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.fill} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="mt-2 text-xs text-gray-600 dark:text-gray-400 text-center">
-            Positive: {formatPercent(data.predictions_summary.positive_predictions / data.predictions_summary.total_predictions)} | 
-            Negative: {formatPercent(data.predictions_summary.negative_predictions / data.predictions_summary.total_predictions)}
-          </div>
-        </div>
-
-        {/* Training Statistics */}
-        <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
-          <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
-            Training Statistics
-          </h3>
-          <div className="space-y-3">
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600 dark:text-gray-400">Test ROC-AUC:</span>
-              <span className={`font-medium ${
-                data.training_statistics.test_roc_auc >= 0.55 ? 'text-green-600 dark:text-green-400' :
-                data.training_statistics.test_roc_auc >= 0.50 ? 'text-yellow-600 dark:text-yellow-400' :
-                'text-red-600 dark:text-red-400'
-              }`}>
-                {data.training_statistics.test_roc_auc.toFixed(3)}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600 dark:text-gray-400">Test Accuracy:</span>
-              <span className="font-medium text-gray-900 dark:text-white">
-                {formatPercent(data.training_statistics.test_accuracy)}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600 dark:text-gray-400">Precision:</span>
-              <span className="font-medium text-gray-900 dark:text-white">
-                {data.training_statistics.precision > 0 ? formatPercent(data.training_statistics.precision) : 'N/A'}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600 dark:text-gray-400">Recall:</span>
-              <span className="font-medium text-gray-900 dark:text-white">
-                {data.training_statistics.recall > 0 ? formatPercent(data.training_statistics.recall) : 'N/A'}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600 dark:text-gray-400">F1-Score:</span>
-              <span className="font-medium text-gray-900 dark:text-white">
-                {data.training_statistics.calculated_f1_score > 0 ? 
-                  data.training_statistics.calculated_f1_score.toFixed(3) : 
-                  (data.training_statistics.test_f1_score > 0 ? 
-                    data.training_statistics.test_f1_score.toFixed(3) : 'N/A')
-                }
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600 dark:text-gray-400">Validation ROC-AUC:</span>
-              <span className="font-medium text-gray-900 dark:text-white">
-                {data.training_statistics.validation_roc_auc > 0 ? 
-                  data.training_statistics.validation_roc_auc.toFixed(3) : 'N/A'}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600 dark:text-gray-400">CV Score:</span>
-              <span className="font-medium text-gray-900 dark:text-white">
-                {data.training_statistics.cv_score > 0 ? 
-                  data.training_statistics.cv_score.toFixed(3) : 'N/A'}
-              </span>
-            </div>
-            <div className="pt-2 border-t border-gray-200 dark:border-gray-600">
-              <div className="text-xs text-gray-500 dark:text-gray-400">
-                Training Split: {data.training_statistics.training_records?.toLocaleString() || 0} / {data.training_statistics.validation_records?.toLocaleString() || 0} / {data.training_statistics.test_records?.toLocaleString() || 0}
-              </div>
-            </div>
           </div>
         </div>
       </div>
