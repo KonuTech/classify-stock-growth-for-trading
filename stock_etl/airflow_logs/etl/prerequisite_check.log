@@ -7,3 +7,9 @@
 2025-08-22 12:23:17,839 - prerequisite_check - INFO - check_execution_prerequisites:202 - Prerequisites passed - proceeding with backfill mode
 2025-08-22 18:00:01,853 - prerequisite_check - INFO - check_execution_prerequisites:202 - Prerequisites passed - proceeding with incremental mode
 2025-08-22 18:36:15,850 - prerequisite_check - INFO - check_execution_prerequisites:202 - Prerequisites passed - proceeding with backfill mode
+2025-08-23 07:03:04,015 - prerequisite_check - INFO - check_execution_prerequisites:196 - Skipping execution: Weekend date: 2025-08-23
+2025-08-23 07:03:05,244 - prerequisite_check - INFO - check_execution_prerequisites:196 - Skipping execution: Weekend date: 2025-08-23
+2025-08-23 07:03:07,433 - prerequisite_check - INFO - check_execution_prerequisites:196 - Skipping execution: Weekend date: 2025-08-23
+2025-08-23 07:07:12,089 - prerequisite_check - INFO - check_execution_prerequisites:196 - Skipping execution: Weekend date: 2025-08-23
+2025-08-23 07:08:24,996 - prerequisite_check - INFO - check_execution_prerequisites:196 - Skipping execution: Weekend date: 2025-08-23
+2025-08-23 07:13:39,645 - prerequisite_check - INFO - check_execution_prerequisites:202 - Prerequisites passed - proceeding with backfill mode

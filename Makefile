@@ -270,7 +270,7 @@ extract-credentials:
 # Start services only (without credential extraction)
 start-services:
 	@echo "Starting Docker services..."
-	docker-compose up -d postgres pgadmin airflow redis
+	docker-compose up -d postgres pgadmin airflow redis web-backend web-frontend
 	@echo "Waiting for services to initialize..."
 	@sleep 70
 

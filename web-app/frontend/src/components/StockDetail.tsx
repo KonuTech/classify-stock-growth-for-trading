@@ -5,7 +5,9 @@ import ChartTabs from './ChartTabs';
 import AdvancedPriceChart from './charts/AdvancedPriceChart';
 import ReturnsChart from './charts/ReturnsChart';
 import StatisticsChart from './charts/StatisticsChart';
+import MLAnalyticsChart from './charts/MLAnalyticsChart';
 import { useDrag } from '../hooks/useDrag';
+import { useMLAnalytics } from '../hooks/useMLAnalytics';
 
 interface StockDetailProps {
   symbol: string;
@@ -62,12 +64,16 @@ export default function StockDetail({ symbol, onClose }: StockDetailProps) {
   // Drag functionality
   const { dragRef, handleRef, dragProps, handleProps } = useDrag();
 
+  // ML Analytics hook
+  const { data: mlData, loading: mlLoading, error: mlError } = useMLAnalytics(symbol);
+
   // Tab options - moved here to be available for useEffect
   const tabOptions = [
     { id: 'overview', label: 'Overview', icon: '📊' },
     { id: 'advanced', label: 'Advanced Analysis', icon: '📈' },
     { id: 'returns', label: 'Returns', icon: '💹' },
     { id: 'statistics', label: 'Statistics', icon: '📋' },
+    { id: 'ml-analytics', label: 'ML Analytics', icon: '🤖' },
   ];
 
   useEffect(() => {
@@ -296,24 +302,26 @@ export default function StockDetail({ symbol, onClose }: StockDetailProps) {
             </div>
           </div>
 
-          {/* Timeframe Selector */}
-          <div className="mb-6">
-            <div className="flex space-x-2">
-              {(['1M', '3M', '6M', '1Y', 'MAX'] as const).map((tf) => (
-                <button
-                  key={tf}
-                  onClick={() => setTimeframe(tf)}
-                  className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                    timeframe === tf
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
-                  }`}
-                >
-                  {tf}
-                </button>
-              ))}
+          {/* Timeframe Selector - Hidden for ML Analytics tab */}
+          {activeTab !== 'ml-analytics' && (
+            <div className="mb-6">
+              <div className="flex space-x-2">
+                {(['1M', '3M', '6M', '1Y', 'MAX'] as const).map((tf) => (
+                  <button
+                    key={tf}
+                    onClick={() => setTimeframe(tf)}
+                    className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                      timeframe === tf
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+                    }`}
+                  >
+                    {tf}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Tab Content */}
           {activeTab === 'overview' && (
@@ -401,7 +409,50 @@ export default function StockDetail({ symbol, onClose }: StockDetailProps) {
             </div>
           )}
 
-          {!analyticsData && activeTab !== 'overview' && (
+          {activeTab === 'ml-analytics' && (
+            <div className="space-y-6">
+              {mlLoading && (
+                <div className="bg-gray-50 dark:bg-gray-700 p-8 rounded-lg text-center">
+                  <div className="text-6xl text-blue-500 mb-4">🤖</div>
+                  <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Loading ML Analytics...</h4>
+                  <p className="text-gray-600 dark:text-gray-400">
+                    Fetching machine learning model data for <strong>{symbol}</strong>
+                  </p>
+                </div>
+              )}
+              
+              {mlError && (
+                <div className="bg-gray-50 dark:bg-gray-700 p-8 rounded-lg text-center">
+                  <div className="text-6xl text-amber-500 mb-4">⚠️</div>
+                  <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2">ML Model Not Available</h4>
+                  <p className="text-gray-600 dark:text-gray-400 mb-4">
+                    {mlError}
+                  </p>
+                  <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 text-left max-w-md mx-auto">
+                    <h5 className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">Possible reasons:</h5>
+                    <ul className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
+                      <li>• No XGBoost model trained for this stock yet</li>
+                      <li>• ML pipeline DAG not executed for this symbol</li>
+                      <li>• Model training failed or is still in progress</li>
+                      <li>• Insufficient historical data for ML training</li>
+                    </ul>
+                  </div>
+                  <p className="text-sm text-gray-500 dark:text-gray-500 mt-4">
+                    📊 Try other tabs for price and technical analysis
+                  </p>
+                </div>
+              )}
+              
+              {mlData && !mlLoading && !mlError && (
+                <MLAnalyticsChart 
+                  symbol={symbol}
+                  data={mlData}
+                />
+              )}
+            </div>
+          )}
+
+          {!analyticsData && activeTab !== 'overview' && activeTab !== 'ml-analytics' && (
             <div className="bg-gray-50 dark:bg-gray-700 p-8 rounded-lg text-center">
               <div className="text-6xl text-amber-500 mb-4">⚠️</div>
               <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Analytics Data Unavailable</h4>

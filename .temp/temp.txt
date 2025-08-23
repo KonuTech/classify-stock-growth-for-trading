@@ -83,4 +83,29 @@ Pooling for CPUs in Airflow
 
 make dev-restart
 
+Do do something like docker compose up:
+make start-services
+
+To restart web-app:
 make web MODE=restart
+
+
+The backend doesn't have the new endpoint yet because it's running the old Docker image. Let me restart the backend to include the new changes:
+
+● Bash(make web MODE=restart COMPONENT=backend REBUILD=true)
+
+Excellent! The API endpoint is working. Now let me also rebuild the frontend to include the new ML Analytics tab:
+
+  Bash(make web MODE=restart COMPONENT=frontend REBUILD=true)
+
+
+
+● Bash(make web MODE=start COMPONENT=frontend)
+  ⎿  make[1]: Entering directory '/mnt/c/Users/borow/VSC/projects/classify-stock-growth-for-trading'
+     🚀 Starting web application services...
+     Ensuring database and Redis are available...
+     … +61 lines (ctrl+r to expand)
+
+● Perfect! Now let me rebuild the frontend to include the latest changes with the ML Analytics tab:
+
+● Bash(make web MODE=restart COMPONENT=frontend REBUILD=true QUICK=true)

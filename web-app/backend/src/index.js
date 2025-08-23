@@ -865,6 +865,240 @@ app.post('/api/etl/data-loaded', async (req, res) => {
   }
 });
 
+// Get ML analytics for a specific stock
+app.get('/api/stocks/:symbol/ml-analytics', async (req, res) => {
+  const { symbol } = req.params;
+  console.log(`🤖 Fetching ML analytics for ${symbol}...`);
+  
+  // Check cache first
+  const cacheKey = `ml_analytics:${symbol}`;
+  const cachedData = await cacheManager.get(cacheKey);
+  
+  if (cachedData) {
+    console.log(`⚡ Returning cached ML analytics for ${symbol}`);
+    return res.json(cachedData);
+  }
+  
+  try {
+    await pool.query('SET search_path TO prod_stock_data');
+    
+    // Get instrument ID for symbol
+    const instrumentResult = await pool.query(`
+      SELECT id FROM base_instruments WHERE symbol = $1
+    `, [symbol.toUpperCase()]);
+    
+    if (instrumentResult.rows.length === 0) {
+      return res.status(404).json({ error: `Stock ${symbol} not found` });
+    }
+    
+    const instrumentId = instrumentResult.rows[0].id;
+    
+    // Get model information
+    const modelResult = await pool.query(`
+      SELECT 
+        model_version,
+        status,
+        test_roc_auc,
+        test_accuracy,
+        training_records,
+        validation_records,
+        test_records,
+        feature_count,
+        training_start_date,
+        training_end_date,
+        hyperparameters,
+        feature_importance,
+        trained_at
+      FROM ml_models 
+      WHERE instrument_id = $1 AND status = 'active'
+      ORDER BY trained_at DESC
+      LIMIT 1
+    `, [instrumentId]);
+    
+    if (modelResult.rows.length === 0) {
+      return res.status(404).json({ error: `No ML model found for ${symbol}` });
+    }
+    
+    const modelInfo = modelResult.rows[0];
+    
+    // Get confusion matrix data (predictions with actual outcomes)
+    const confusionResult = await pool.query(`
+      SELECT 
+        predicted_class::int as predicted_class,
+        actual_class::int as actual_class,
+        COUNT(*) as count 
+      FROM ml_predictions 
+      WHERE instrument_id = $1 AND actual_class IS NOT NULL
+      GROUP BY predicted_class, actual_class
+      ORDER BY predicted_class, actual_class
+    `, [instrumentId]);
+    
+    // Build confusion matrix
+    const confusionMatrix = [[0, 0], [0, 0]];
+    confusionResult.rows.forEach(row => {
+      confusionMatrix[row.actual_class][row.predicted_class] = parseInt(row.count);
+    });
+    
+    // Get ROC curve data
+    const rocResult = await pool.query(`
+      SELECT 
+        prediction_probability,
+        actual_class::int as actual_class
+      FROM ml_predictions 
+      WHERE instrument_id = $1 AND actual_class IS NOT NULL
+      ORDER BY prediction_probability DESC
+      LIMIT 1000
+    `, [instrumentId]);
+    
+    // Calculate ROC curve points
+    const rocData = calculateROCCurve(rocResult.rows);
+    
+    // Get predictions summary
+    const predSummaryResult = await pool.query(`
+      SELECT 
+        COUNT(*) as total_predictions,
+        COUNT(CASE WHEN predicted_class = true THEN 1 END) as positive_predictions,
+        COUNT(CASE WHEN predicted_class = false THEN 1 END) as negative_predictions,
+        COUNT(CASE WHEN actual_class IS NOT NULL AND predicted_class = actual_class THEN 1 END)::float / 
+          NULLIF(COUNT(CASE WHEN actual_class IS NOT NULL THEN 1 END), 0) as accuracy_rate
+      FROM ml_predictions 
+      WHERE instrument_id = $1
+    `, [instrumentId]);
+    
+    // Get latest predictions
+    const latestPredsResult = await pool.query(`
+      SELECT 
+        prediction_date,
+        target_date,
+        predicted_class,
+        prediction_probability,
+        actual_class,
+        trading_signal
+      FROM ml_predictions 
+      WHERE instrument_id = $1
+      ORDER BY prediction_date DESC
+      LIMIT 10
+    `, [instrumentId]);
+    
+    // Get backtest results
+    const backtestResult = await pool.query(`
+      SELECT 
+        total_return,
+        sharpe_ratio,
+        win_rate,
+        total_trades,
+        max_drawdown,
+        annualized_return
+      FROM ml_backtest_results 
+      WHERE instrument_id = $1
+      ORDER BY backtest_end_date DESC
+      LIMIT 1
+    `, [instrumentId]);
+    
+    // Parse feature importance
+    let featureImportance = [];
+    try {
+      if (modelInfo.feature_importance) {
+        const importance = JSON.parse(modelInfo.feature_importance);
+        featureImportance = Object.entries(importance)
+          .map(([feature_name, importance_value]) => ({
+            feature_name,
+            importance: importance_value
+          }))
+          .sort((a, b) => b.importance - a.importance)
+          .slice(0, 15);
+      }
+    } catch (e) {
+      console.warn(`⚠️ Could not parse feature importance for ${symbol}:`, e.message);
+    }
+    
+    const response = {
+      symbol,
+      model_info: {
+        model_version: modelInfo.model_version,
+        status: modelInfo.status,
+        test_roc_auc: parseFloat(modelInfo.test_roc_auc || 0),
+        test_accuracy: parseFloat(modelInfo.test_accuracy || 0),
+        training_records: parseInt(modelInfo.training_records || 0),
+        validation_records: parseInt(modelInfo.validation_records || 0),
+        test_records: parseInt(modelInfo.test_records || 0),
+        feature_count: parseInt(modelInfo.feature_count || 0),
+        training_start_date: modelInfo.training_start_date,
+        training_end_date: modelInfo.training_end_date,
+        trained_at: modelInfo.trained_at
+      },
+      performance_metrics: {
+        confusion_matrix: confusionMatrix,
+        roc_curve: rocData
+      },
+      predictions_summary: {
+        total_predictions: parseInt(predSummaryResult.rows[0].total_predictions),
+        positive_predictions: parseInt(predSummaryResult.rows[0].positive_predictions),
+        negative_predictions: parseInt(predSummaryResult.rows[0].negative_predictions),
+        accuracy_rate: parseFloat(predSummaryResult.rows[0].accuracy_rate || 0),
+        latest_predictions: latestPredsResult.rows.map(pred => ({
+          prediction_date: pred.prediction_date,
+          target_date: pred.target_date,
+          predicted_class: pred.predicted_class,
+          prediction_probability: parseFloat(pred.prediction_probability),
+          actual_class: pred.actual_class,
+          trading_signal: pred.trading_signal
+        }))
+      },
+      backtest_results: backtestResult.rows[0] ? {
+        total_return: parseFloat(backtestResult.rows[0].total_return || 0),
+        sharpe_ratio: parseFloat(backtestResult.rows[0].sharpe_ratio || 0),
+        win_rate: parseFloat(backtestResult.rows[0].win_rate || 0),
+        total_trades: parseInt(backtestResult.rows[0].total_trades || 0),
+        max_drawdown: parseFloat(backtestResult.rows[0].max_drawdown || 0),
+        annualized_return: parseFloat(backtestResult.rows[0].annualized_return || 0)
+      } : null,
+      feature_importance: featureImportance
+    };
+    
+    // Cache for 24 hours (ML data doesn't change frequently)
+    await cacheManager.set(cacheKey, response, 86400);
+    
+    console.log(`✅ ML analytics for ${symbol} compiled successfully`);
+    res.json(response);
+    
+  } catch (error) {
+    console.error(`❌ Error fetching ML analytics for ${symbol}:`, error);
+    res.status(500).json({ 
+      error: 'Failed to fetch ML analytics', 
+      details: error.message 
+    });
+  }
+});
+
+// Helper function to calculate ROC curve points
+function calculateROCCurve(predictions) {
+  if (predictions.length === 0) return { fpr: [0, 1], tpr: [0, 1] };
+  
+  const sorted = predictions.sort((a, b) => b.prediction_probability - a.prediction_probability);
+  const positives = sorted.filter(p => p.actual_class === 1).length;
+  const negatives = sorted.filter(p => p.actual_class === 0).length;
+  
+  if (positives === 0 || negatives === 0) return { fpr: [0, 1], tpr: [0, 1] };
+  
+  const fpr = [0];
+  const tpr = [0];
+  let tp = 0, fp = 0;
+  
+  for (let i = 0; i < sorted.length; i++) {
+    if (sorted[i].actual_class === 1) tp++;
+    else fp++;
+    
+    // Add point every 10% of data to avoid too many points
+    if (i % Math.max(1, Math.floor(sorted.length / 20)) === 0 || i === sorted.length - 1) {
+      fpr.push(fp / negatives);
+      tpr.push(tp / positives);
+    }
+  }
+  
+  return { fpr, tpr };
+}
+
 // Get model performance
 app.get('/api/models', async (req, res) => {
   console.log('🤖 Fetching ML models performance...');
