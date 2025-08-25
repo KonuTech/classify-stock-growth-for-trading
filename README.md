@@ -1,6 +1,6 @@
 ### **❗ Developer Resources**: For detailed technical documentation, architecture decisions, and development guidance, see  **[README-detailed.md](README-detailed.md)** and **[CLAUDE.md](CLAUDE.md)**. These files contain comprehensive information about the codebase structure, essential commands, database design patterns, Airflow DAG configuration, and trading calendar integration.
 
-# AI-Powered Stock Analysis Platform for Polish Stock Exchange
+# Stock Analysis Platform for Polish Stock Exchange
 
 ![Status](https://img.shields.io/badge/Status-Production%20Ready-green)
 ![Python](https://img.shields.io/badge/Python-3.12+-blue)
