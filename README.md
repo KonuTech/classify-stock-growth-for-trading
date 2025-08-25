@@ -1,15 +1,32 @@
+# AI-Powered Stock Analysis Platform for Polish Stock Exchange
+
+![Status](https://img.shields.io/badge/Status-Production%20Ready-green)
+![Python](https://img.shields.io/badge/Python-3.12+-blue)
+![React](https://img.shields.io/badge/React-18+-blue)
+![Node.js](https://img.shields.io/badge/Node.js-18+-green)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-blue)
+![Redis](https://img.shields.io/badge/Redis-7-red)
+![Airflow](https://img.shields.io/badge/Airflow-3.0.4-orange)
+![XGBoost](https://img.shields.io/badge/XGBoost-3.0.4%20GPU-brightgreen)
+![CUDA](https://img.shields.io/badge/CUDA-Accelerated-green)
+![Docker](https://img.shields.io/badge/Docker-Containerized-blue)
+![License](https://img.shields.io/badge/License-MIT-yellow)
+
+A comprehensive **AI-powered stock analysis platform** that combines ETL data processing, GPU-accelerated machine learning, and an interactive web application with high-performance Redis caching. Features production-ready data pipelines for Polish Stock Exchange (WSE), XGBoost-based stock growth prediction models with 180+ technical indicators, and a modern React dashboard with sub-second API responses and automatic cache invalidation for real-time analysis and visualization.
+
+
 > **📚 Developer Resources**: For detailed technical documentation, architecture decisions, and development guidance, see  **[README-detailed.md](README-detailed.md)** and **[CLAUDE.md](CLAUDE.md)**. This file contains comprehensive information about the codebase structure, essential commands, database design patterns, Airflow DAG configuration, and trading calendar integration.
 
-
-## The project is huge, so I prepared a hopefully helpful self-evaluation for the course project
-### Evaluation Criteria
+---
+### The project is huge, so I prepared a hopefully helpful self-evaluation for the course project
+#### Evaluation Criteria
 
 1) Problem Description (**3 points**)
     * [X] **(1 point) Problem is described in README briefly without much detail.**
       - **Files**: [README.md](README.md), [CLAUDE.md](CLAUDE.md)
     * [X] (1 point) Problem is described in README with enough context and the end goal, so it is clear what the problem is and how the solution will be used.
       - **Files**: [README.md](README.md), [CLAUDE.md](CLAUDE.md)
-    * [] (1 point) New problem definition (not just the current setup of a week-long strategy for the largest stocks): e.g., hourly or long-term trading for stocks, different stock exchanges (other countries), crypto, betting, etc.
+    * [ ] (1 point) New problem definition (not just the current setup of a week-long strategy for the largest stocks): e.g., hourly or long-term trading for stocks, different stock exchanges (other countries), crypto, betting, etc.
     * [X] (1 point) State-of-the-art clear description of each step, findings, and how to reproduce it. It is easy to understand the logic of each step, and important findings/difficulties are outlined.
       - **Files**: [README.md](README.md), [CLAUDE.md](CLAUDE.md), [Makefile](Makefile), [docs/notebooks/](docs/notebooks/)
 
@@ -73,25 +90,6 @@
     * [ ] (1-2 points) Subjective bonus points from a peer reviewer: why do you like the project, what was particularly well done in the project?
 
 ---
-
-# AI-Powered Stock Analysis Platform for Polish Stock Exchange
-
-![Status](https://img.shields.io/badge/Status-Production%20Ready-green)
-![Python](https://img.shields.io/badge/Python-3.12+-blue)
-![React](https://img.shields.io/badge/React-18+-blue)
-![Node.js](https://img.shields.io/badge/Node.js-18+-green)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-blue)
-![Redis](https://img.shields.io/badge/Redis-7-red)
-![Airflow](https://img.shields.io/badge/Airflow-3.0.4-orange)
-![XGBoost](https://img.shields.io/badge/XGBoost-3.0.4%20GPU-brightgreen)
-![CUDA](https://img.shields.io/badge/CUDA-Accelerated-green)
-![Docker](https://img.shields.io/badge/Docker-Containerized-blue)
-![License](https://img.shields.io/badge/License-MIT-yellow)
-
-A comprehensive **AI-powered stock analysis platform** that combines ETL data processing, GPU-accelerated machine learning, and an interactive web application with high-performance Redis caching. Features production-ready data pipelines for Polish Stock Exchange (WSE), XGBoost-based stock growth prediction models with 180+ technical indicators, and a modern React dashboard with sub-second API responses and automatic cache invalidation for real-time analysis and visualization.
-
-> **📚 Developer Resources**: For detailed technical documentation, architecture decisions, and development guidance, see **[CLAUDE.md](CLAUDE.md)**. This file contains comprehensive information about the codebase structure, essential commands, database design patterns, Airflow DAG configuration, and trading calendar integration.
-
 ## 🎯 Project Evaluation Against Course Criteria
 
 This project addresses all evaluation criteria from the course requirements with comprehensive implementations:
