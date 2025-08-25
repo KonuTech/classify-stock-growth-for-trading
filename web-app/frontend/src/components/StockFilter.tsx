@@ -4,8 +4,8 @@ import { MagnifyingGlassIcon, FunnelIcon } from '@heroicons/react/24/outline';
 interface StockFilterProps {
   searchTerm: string;
   onSearchChange: (term: string) => void;
-  sortBy: 'symbol' | 'name' | 'price' | 'records' | 'total_return' | 'max_drawdown' | 'price_range';
-  onSortChange: (sort: 'symbol' | 'name' | 'price' | 'records' | 'total_return' | 'max_drawdown' | 'price_range') => void;
+  sortBy: 'symbol' | 'name' | 'price' | 'records' | 'total_return' | 'max_drawdown' | 'price_range' | 'total_profit';
+  onSortChange: (sort: 'symbol' | 'name' | 'price' | 'records' | 'total_return' | 'max_drawdown' | 'price_range' | 'total_profit') => void;
   sortOrder: 'asc' | 'desc';
   onSortOrderChange: (order: 'asc' | 'desc') => void;
 }
@@ -53,6 +53,7 @@ export default function StockFilter({
             <option value="price_range">Price Range</option>
             <option value="total_return">Total Return</option>
             <option value="max_drawdown">Max Drawdown</option>
+            <option value="total_profit">Total Profit</option>
             <option value="records">Records</option>
           </select>
 

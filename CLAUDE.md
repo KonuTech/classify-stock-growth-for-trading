@@ -38,13 +38,15 @@ This is a comprehensive AI-powered stock analysis platform that combines ETL dat
 - **web-app/backend/src/index.js**: Express.js API server with PostgreSQL integration and Redis caching
 - **web-app/backend/src/cache.js**: Redis caching layer with intelligent TTL management and graceful degradation
 - **web-app/frontend/src/App.tsx**: React dashboard with TypeScript and Tailwind CSS
-- **web-app/frontend/src/components/**: Reusable UI components (StockDetail, StockFilter, charts)
+- **web-app/frontend/src/components/**: Reusable UI components (StockDetail, StockFilter, charts, Portfolio components)
+- **web-app/frontend/src/contexts/**: React Context providers (Theme, Watchlist, Portfolio)
 - **web-app/frontend/src/hooks/**: Custom React hooks for data fetching and state management
 
 ### Data Flow
 1. **ETL Pipeline**: Extract data from Stooq API → Validate using Pydantic models → Load into PostgreSQL → Track jobs
 2. **ML Pipeline**: Extract from PostgreSQL → Feature engineering (180+ features) → XGBoost training → Backtesting → Store results  
-3. **Web Application**: React frontend ↔ Express.js API (with Redis caching) ↔ PostgreSQL (`prod_stock_data` schema)
+3. **Web Application**: React frontend (with Portfolio tracking) ↔ Express.js API (with Redis caching) ↔ PostgreSQL (`prod_stock_data` schema)
+4. **Portfolio Management**: localStorage persistence ↔ React Context ↔ Portfolio components with buy/sell transactions
 
 ## Essential Commands
 
@@ -800,12 +802,14 @@ ORDER BY m.created_at DESC LIMIT 10;
 - **Advanced charting** with technical indicators and statistical analysis
 - **Complete API framework** with 10 comprehensive test cases
 - **Docker integration** with main infrastructure deployment
+- **Portfolio Management System** with localStorage persistence and transaction tracking
 
 ### Infrastructure Enhancements
 - **Incremental commit architecture** for enhanced fault tolerance
 - **Enhanced duplicate prevention** with validation across multiple runs
 - **Automated credential management** with service orchestration
 - **Complete Docker integration** for web application deployment
+- **Component-level restart capability** for backend/frontend services independently
 
 ### Redis Caching Layer
 - **High-performance caching** with 166x-183x response time improvements for cached endpoints
@@ -912,6 +916,40 @@ curl -X POST http://localhost:3001/api/etl/data-loaded \
 - **Error-Safe Price Formatting**: All `formatPrice` functions handle both string and number inputs with NaN validation
 - **Consistent Stock Name Cleaning**: `cleanStockName()` function removes "Stock" suffix across all components  
 - **Proper Function Hoisting**: Helper functions defined before usage to prevent initialization errors
+
+## Portfolio Management System
+
+### localStorage Persistence Architecture
+**PortfolioContext Implementation** (`web-app/frontend/src/contexts/PortfolioContext.tsx`):
+- **Lazy State Initialization**: Uses `useState(() => { ... })` to load data synchronously during first render
+- **Automatic Persistence**: All transactions saved to localStorage with key `stock_portfolio_transactions`
+- **Transaction Management**: Complete CRUD operations for buy/sell transactions with UUID generation
+- **Position Calculations**: Real-time portfolio analytics (unrealized/realized profits, total value)
+- **Export/Import**: JSON-based data backup and restore functionality
+
+**Key Design Patterns**:
+- **Race Condition Prevention**: Data loaded during initialization, not via useEffect after mounting
+- **Data Integrity**: Comprehensive validation for imported transaction data
+- **Real-time Updates**: Position calculations update automatically when current prices change
+- **Error Recovery**: Graceful handling of corrupted localStorage data with automatic cleanup
+
+### Portfolio Components
+- **PortfolioManager.tsx**: Overview dashboard with total portfolio value and profit/loss
+- **PortfolioTransaction.tsx**: Individual stock buy/sell interface with current position display
+- **Integration**: Seamlessly integrated with stock list and watchlist functionality
+
+### Transaction Data Structure
+```typescript
+interface Transaction {
+  id: string;                // UUID generated client-side
+  symbol: string;            // Stock symbol (XTB, PKN, etc.)
+  type: 'buy' | 'sell';     // Transaction type
+  date: string;             // Trade date (YYYY-MM-DD)
+  price: number;            // Execution price
+  quantity: number;         // Number of shares
+  createdAt: string;        // ISO timestamp
+}
+```
 
 # important-instruction-reminders
 Do what has been asked; nothing more, nothing less.

@@ -9,6 +9,9 @@ import ThemeToggle from './components/ThemeToggle';
 import Card from './components/ui/Card';
 import Button from './components/ui/Button';
 import { useWatchlist, WatchlistProvider } from './contexts/WatchlistContext';
+import { usePortfolio, PortfolioProvider } from './contexts/PortfolioContext';
+import PortfolioTransaction from './components/PortfolioTransaction';
+import PortfolioManager from './components/PortfolioManager';
 
 // Define what our stock data looks like
 interface Stock {
@@ -34,12 +37,15 @@ function AppContent() {
   const [showComparison, setShowComparison] = useState(false);
   const [comparisonInitialStocks, setComparisonInitialStocks] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState<'symbol' | 'name' | 'price' | 'records' | 'total_return' | 'max_drawdown' | 'price_range'>('total_return');
+  const [sortBy, setSortBy] = useState<'symbol' | 'name' | 'price' | 'records' | 'total_return' | 'max_drawdown' | 'price_range' | 'total_profit'>('total_return');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [timeframe, setTimeframe] = useState<'1M' | '3M' | '6M' | '1Y' | 'MAX'>('1Y');
 
   // Watchlist functionality
   const { watchlist, watchlistCount } = useWatchlist();
+  
+  // Portfolio functionality
+  const { getTotalPortfolioProfit, getPositionForSymbol } = usePortfolio();
 
   // Helper function to clean stock names
   const cleanStockName = (name: string) => {
@@ -71,6 +77,12 @@ function AppContent() {
       stock.symbol.toLowerCase().includes(searchTerm.toLowerCase()) ||
       stock.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
+
+    // Create current prices map for portfolio calculations
+    const currentPrices = stocks.reduce((acc, stock) => {
+      acc[stock.symbol] = parseFloat(stock.latest_price?.toString() || '0');
+      return acc;
+    }, {} as Record<string, number>);
 
     filtered.sort((a, b) => {
       let aValue: any;
@@ -105,6 +117,23 @@ function AppContent() {
           aValue = parseFloat(a.price_range?.toString() || '0');
           bValue = parseFloat(b.price_range?.toString() || '0');
           break;
+        case 'total_profit':
+          const aPosition = getPositionForSymbol(a.symbol);
+          const bPosition = getPositionForSymbol(b.symbol);
+          const aCurrentPrice = currentPrices[a.symbol] || 0;
+          const bCurrentPrice = currentPrices[b.symbol] || 0;
+          
+          // Calculate total profit for each stock
+          const aUnrealizedProfit = aPosition && aPosition.totalShares > 0 
+            ? (aPosition.totalShares * aCurrentPrice) - (aPosition.totalShares * aPosition.averageBuyPrice)
+            : 0;
+          const bUnrealizedProfit = bPosition && bPosition.totalShares > 0 
+            ? (bPosition.totalShares * bCurrentPrice) - (bPosition.totalShares * bPosition.averageBuyPrice)
+            : 0;
+          
+          aValue = (aPosition?.realizedProfit || 0) + aUnrealizedProfit;
+          bValue = (bPosition?.realizedProfit || 0) + bUnrealizedProfit;
+          break;
         default:
           return 0;
       }
@@ -122,7 +151,7 @@ function AppContent() {
     });
 
     return filtered;
-  }, [stocks, searchTerm, sortBy, sortOrder]);
+  }, [stocks, searchTerm, sortBy, sortOrder, getPositionForSymbol]);
 
   // Get watchlisted stocks with their full data
   const watchlistedStocks = useMemo(() => {
@@ -253,6 +282,9 @@ function AppContent() {
           </div>
         </div>
 
+        {/* Portfolio Manager */}
+        <PortfolioManager />
+
         {/* Watchlisted Stocks Section */}
         {watchlistedStocks.length > 0 && (
           <div className="mb-8">
@@ -284,13 +316,21 @@ function AppContent() {
                       onClick={() => setSelectedStock(stock.symbol)}
                     >
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center">
+                        <div className="flex items-center space-x-4">
                           <div className="flex-shrink-0">
                             <div className="h-10 w-10 rounded-full bg-red-500 flex items-center justify-center">
                               <span className="text-xs font-medium text-white">
                                 {stock.symbol.substring(0, 3)}
                               </span>
                             </div>
+                          </div>
+                          
+                          {/* Portfolio Transaction Component */}
+                          <div className="flex-1 min-w-[300px]" onClick={(e) => e.stopPropagation()}>
+                            <PortfolioTransaction 
+                              symbol={stock.symbol}
+                              currentPrice={parseFloat(stock.latest_price?.toString() || '0')}
+                            />
                           </div>
                         </div>
                         <div className="flex items-center space-x-6">
@@ -460,13 +500,21 @@ function AppContent() {
                       onClick={() => setSelectedStock(stock.symbol)}
                     >
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center">
+                        <div className="flex items-center space-x-4">
                           <div className="flex-shrink-0">
                             <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center">
                               <span className="text-xs font-medium text-white">
                                 {stock.symbol.substring(0, 3)}
                               </span>
                             </div>
+                          </div>
+                          
+                          {/* Portfolio Transaction Component */}
+                          <div className="flex-1 min-w-[300px]" onClick={(e) => e.stopPropagation()}>
+                            <PortfolioTransaction 
+                              symbol={stock.symbol}
+                              currentPrice={parseFloat(stock.latest_price?.toString() || '0')}
+                            />
                           </div>
                         </div>
                         <div className="flex items-center space-x-6">
@@ -579,7 +627,9 @@ function App() {
   return (
     <ThemeProvider>
       <WatchlistProvider>
-        <AppContent />
+        <PortfolioProvider>
+          <AppContent />
+        </PortfolioProvider>
       </WatchlistProvider>
     </ThemeProvider>
   );

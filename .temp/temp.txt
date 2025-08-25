@@ -92,3 +92,7 @@ make web MODE=restart
 
 make web MODE=restart COMPONENT=backend REBUILD=true QUICK=true
 make web MODE=restart COMPONENT=frontend REBUILD=true QUICK=true
+
+
+make web MODE=restart COMPONENT=backend REBUILD=false QUICK=true
+make web MODE=restart COMPONENT=frontend REBUILD=false QUICK=true
