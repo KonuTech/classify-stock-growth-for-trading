@@ -1,3 +1,5 @@
+# **❗ Developer Resources**: For detailed technical documentation, architecture decisions, and development guidance, see  **[README-detailed.md](README-detailed.md)** and **[CLAUDE.md](CLAUDE.md)**. These files contain comprehensive information about the codebase structure, essential commands, database design patterns, Airflow DAG configuration, and trading calendar integration.
+
 # AI-Powered Stock Analysis Platform for Polish Stock Exchange
 
 ![Status](https://img.shields.io/badge/Status-Production%20Ready-green)
@@ -12,10 +14,12 @@
 ![Docker](https://img.shields.io/badge/Docker-Containerized-blue)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
-A comprehensive **AI-powered stock analysis platform** that combines ETL data processing, GPU-accelerated machine learning, and an interactive web application with high-performance Redis caching. Features production-ready data pipelines for Polish Stock Exchange (WSE), XGBoost-based stock growth prediction models with 180+ technical indicators, and a modern React dashboard with sub-second API responses and automatic cache invalidation for real-time analysis and visualization.
+## Overview
 
+This is a **comprehensive AI-powered stock analysis platform** that combines enterprise-grade ETL data processing, GPU-accelerated machine learning, and a modern interactive web application with high-performance Redis caching layer. The platform features production-ready data pipelines for Polish Stock Exchange (WSE) with smart execution mode detection, XGBoost-based stock growth prediction models utilizing 180+ physics-inspired technical indicators, and a responsive React dashboard delivering sub-second API responses with intelligent cache invalidation for real-time financial analysis and visualization.
 
-> **📚 Developer Resources**: For detailed technical documentation, architecture decisions, and development guidance, see  **[README-detailed.md](README-detailed.md)** and **[CLAUDE.md](CLAUDE.md)**. This file contains comprehensive information about the codebase structure, essential commands, database design patterns, Airflow DAG configuration, and trading calendar integration.
+The system processes 50,000+ historical stock records, trains machine learning models with ROC-AUC scores above 0.55, provides trading signals through a modern web interface, and maintains 166x-183x performance improvements through Redis caching. Built with Docker containerization, Apache Airflow orchestration, and comprehensive PostgreSQL database design with multi-environment support (dev/test/prod schemas).
+
 
 ## 📊 Project Architecture Overview
 
@@ -84,6 +88,96 @@ erDiagram
     base_instruments ||--o{ ml_predictions : "predictions for"
     base_instruments ||--o{ ml_backtest_results : "backtests for"
 ```
+### 🚀 Apache Airflow Interface
+#### Multi-environment ETL Pipeline DAG Graph
+*Visual representation of stock data processing workflow*
+<!-- Screenshot needed: http://localhost:8080 - prod_stock_etl_pipeline graph view -->
+<!-- Screenshot needed: http://localhost:8080 - DAGs list view -->
+![image](docs/images/airflow/airflow-01.jpg)
+![image](docs/images/airflow/airflow-02.jpg)
+
+#### ML Training DAGs
+*Per-stock XGBoost model training with GPU acceleration*
+<!-- Screenshot needed: http://localhost:8080 - ML pipeline DAGs list -->
+![image](docs/images/airflow/airflow-03.jpg)
+![image](docs/images/airflow/airflow-04.jpg)
+
+### 📊 Database Management (pgAdmin)
+
+#### Schema Browser
+*Multi-environment database schemas with normalized design*
+<!-- Screenshot needed: http://localhost:5050 - Schema browser showing dev/test/prod_stock_data -->
+![image](docs/images/postgresql/postgres-02.jpg)
+
+#### Stock Prices Data View
+*Production data with 50,000+ OHLCV records*
+<!-- Screenshot needed: http://localhost:5050 - stock_prices table data view -->
+![image](docs/images/postgresql/postgres-01.jpg)
+
+#### ML Models Table
+*XGBoost model metadata with performance metrics*
+<!-- Screenshot needed: http://localhost:5050 - ml_models table showing ROC-AUC, accuracy -->
+![image](docs/images/postgresql/postgres-03.jpg)
+![image](docs/images/postgresql/postgres-04.jpg)
+
+## 📸 Platform Screenshots
+
+### 🌐 Web Application Interface. NOTE: All displayed data is authentic, including growth, returns, and profits. 
+
+#### Stock Analysis Dashboard
+*Main dashboard showing stock list with real-time data and whishlisting capabilities*
+<!-- Screenshot needed: http://localhost:3000 - Main dashboard view -->
+![image](docs/images/web-app/web-app-03.jpg)
+![image](docs/images/web-app/web-app-02.jpg)
+
+#### Stock Detail Modal - Overview Tab
+*Comprehensive stock information with price charts and technical indicators*
+<!-- Screenshot needed: http://localhost:3000 - Stock detail modal, Overview tab -->
+![image](docs/images/web-app/web-app-05.jpg)
+![image](docs/images/web-app/web-app-06.jpg)
+
+
+#### Stock Detail Modal - ML Analytics Tab
+*XGBoost model insights with feature importance and trading signals*
+<!-- Screenshot needed: http://localhost:3000 - Stock detail modal, ML Analytics tab -->
+![image](docs/images/web-app/web-app-09.jpg)
+![image](docs/images/web-app/web-app-04.jpg)
+
+#### Stock Detail Modal - Advanced Analytics Tab
+*Technical analysis with moving averages, RSI, MACD, and volume indicators*
+<!-- Screenshot needed: http://localhost:3000 - Stock detail modal, Advanced Analytics tab -->
+![image](docs/images/web-app/web-app-07.jpg)
+
+#### Portfolio Management Interface
+*Buy/sell transactions with real-time profit/loss calculations*
+<!-- Screenshot needed: http://localhost:3000 - Portfolio management interface -->
+![image](docs/images/web-app/web-app-01.jpg)
+
+
+### 🔧 API Endpoints
+
+#### Health Check Response
+*Backend API health and database connectivity status*
+```json
+{
+  "status": "OK",
+  "timestamp": "2025-08-25T10:30:45.123Z"
+}
+```
+<!-- Screenshot needed: http://localhost:3001/health - JSON response -->
+
+#### Stock Data API Response
+*Real-time stock data with technical indicators*
+```json
+{
+  "symbol": "XTB",
+  "companyName": "X-Trade Brokers DM S.A.",
+  "currentPrice": 24.50,
+  "priceHistory": [...],
+  "technicalIndicators": {...}
+}
+```
+<!-- Screenshot needed: http://localhost:3001/api/stocks/XTB - JSON response -->
 
 ---
 ### The project is huge, so I prepared a hopefully helpful self-evaluation for the course project

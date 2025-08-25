@@ -1093,7 +1093,7 @@ app.get('/api/stocks/:symbol/ml-analytics', async (req, res) => {
           const hasActual = (predSummaryResult.rows[0] ? parseFloat(predSummaryResult.rows[0].accuracy_rate || 0) : 0) > 0;
           const hasTrainingData = parseInt(modelInfo.training_records || 0) > 0;
           const hasValidationAUC = parseFloat(modelInfo.validation_roc_auc || 0) > 0;
-          const hasFeatureImportance = modelInfo.feature_importance && JSON.parse(modelInfo.feature_importance || '{}');
+          const hasFeatureImportance = featureImportance && featureImportance.length > 0;
           
           let score = 0;
           if (hasActual) score += 0.4; // 40% for having actual outcomes
