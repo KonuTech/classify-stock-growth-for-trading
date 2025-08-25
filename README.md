@@ -17,6 +17,74 @@ A comprehensive **AI-powered stock analysis platform** that combines ETL data pr
 
 > **📚 Developer Resources**: For detailed technical documentation, architecture decisions, and development guidance, see  **[README-detailed.md](README-detailed.md)** and **[CLAUDE.md](CLAUDE.md)**. This file contains comprehensive information about the codebase structure, essential commands, database design patterns, Airflow DAG configuration, and trading calendar integration.
 
+## 📊 Project Architecture Overview
+
+### Complete Platform Architecture
+
+```
+                    🌐 Web Application Layer
+┌─────────────────────────────────────────────────────────────────┐
+│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐│
+│  │   Frontend      │───▶│   Backend API   │───▶│   PostgreSQL    ││
+│  │  React + TS     │    │   Express.js    │    │ prod_stock_data ││  
+│  │   Port 3000     │    │   Port 3001     │    │   Port 5432     ││
+│  │                 │    │       ↕         │    │                 ││
+│  │                 │    │   Redis Cache   │    │                 ││
+│  │                 │    │ 183x Faster API │    │                 ││
+│  │                 │    │ Auto-Invalidate │    │                 ││
+│  └─────────────────┘    └─────────────────┘    └─────────────────┘│
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+                    🤖 AI/ML Processing Layer  
+┌─────────────────────────────────────────────────────────────────┐
+│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐│
+│  │ Feature Engine  │───▶│ XGBoost Training│───▶│ ML Predictions  ││
+│  │ 180+ Indicators │    │ GPU Accelerated │    │ & Backtesting   ││
+│  │    TA-Lib       │    │  Per Stock      │    │   Results       ││
+│  └─────────────────┘    └─────────────────┘    └─────────────────┘│
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+                    📊 Data Pipeline Layer
+┌─────────────────────────────────────────────────────────────────┐
+│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐│
+│  │   Stooq API     │───▶│  ETL Pipeline   │───▶│  PostgreSQL 17  ││
+│  │  (Data Source)  │    │ Python+Pydantic│    │ Multi-Schema DB ││
+│  └─────────────────┘    └─────────────────┘    └─────────────────┘│
+│                                │                                 │
+│                                ▼                                 │
+│                       ┌─────────────────┐                        │
+│                       │ Apache Airflow  │                        │
+│                       │ Multi-Env DAGs  │                        │
+│                       └─────────────────┘                        │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## 📊 Data Model
+
+The system uses a **normalized database design** following 3NF/BCNF principles:
+
+```mermaid
+erDiagram
+    countries ||--o{ exchanges : "located in"
+    exchanges ||--o{ base_instruments : "trades on"
+    sectors ||--o{ stocks : "categorizes"
+    base_instruments ||--|| stocks : "specialized as"
+    base_instruments ||--|| indices : "specialized as"
+    stocks ||--o{ stock_prices : "has daily prices"
+    indices ||--o{ index_prices : "has daily values"
+    etl_jobs ||--o{ etl_job_details : "contains details"
+    base_instruments ||--o{ data_quality_metrics : "has metrics"
+    base_instruments ||--o{ ml_models : "has ML models"
+    ml_models ||--o{ ml_feature_data : "stores features"
+    ml_models ||--o{ ml_predictions : "generates predictions"
+    ml_models ||--o{ ml_backtest_results : "produces backtests"
+    base_instruments ||--o{ ml_feature_data : "features for"
+    base_instruments ||--o{ ml_predictions : "predictions for"
+    base_instruments ||--o{ ml_backtest_results : "backtests for"
+```
+
 ---
 ### The project is huge, so I prepared a hopefully helpful self-evaluation for the course project
 #### Evaluation Criteria
